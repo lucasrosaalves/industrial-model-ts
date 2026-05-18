@@ -156,7 +156,7 @@ describe("QueryMapper", () => {
     const withUndefined = await mapper.map({
       viewExternalId: "CogniteAsset",
       select: { name: true },
-      cursor: undefined,
+      cursor: undefined as unknown as string,
     });
 
     expect(withNull.cursors).toEqual({});
