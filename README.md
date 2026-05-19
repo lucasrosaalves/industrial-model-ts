@@ -672,16 +672,28 @@ if (cursor) {
 | `NodeId`, `DataModelId` | Instance and data-model identifiers |
 | `QueryOptions`, `QuerySelect`, `WhereInput`, `SortInput` | Query input types |
 | `QueryResult`, `QueryResultItem`, `QueryResultMetadata` | Query output types |
+| `buildViewSchema`, `nodeIdSchema` | Zod schemas built from Cognite view metadata |
 | `SortDirection` | `"ascending"` \| `"descending"` |
 
-### `new IndustrialModelClient(client, dataModelId)`
+### `new IndustrialModelClient(client, dataModelId, options?)`
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `client` | `CogniteClient` | Authenticated Cognite SDK client |
 | `dataModelId` | `DataModelId` | Space, externalId, and version of the data model |
+| `options.validateResults` | `boolean` | Optional. Validate and parse query results with Zod schemas derived from Cognite view metadata |
 
 On the first query, view definitions are loaded from CDF and cached for the lifetime of the client instance.
+
+Query inputs are validated against the loaded view metadata before the Cognite request is built. Result validation is opt-in because it parses every returned item:
+
+```ts
+const model = new IndustrialModelClient(client, dataModelId, {
+  validateResults: true,
+});
+```
+
+When `validateResults` is enabled, Cognite `date` and `timestamp` view properties are converted to JavaScript `Date` objects. Without this option, result values are returned as Cognite provides them, usually ISO strings for timestamps.
 
 ### `model.query<TModel>()(options)`
 

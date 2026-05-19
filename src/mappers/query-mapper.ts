@@ -11,6 +11,7 @@ import type {
 import { DEFAULT_LIMIT, EDGE_MARKER, MAX_LIMIT, NESTED_SEP } from "../constants";
 import type { QueryOptions, QuerySelect } from "../types";
 import { FilterMapper } from "./filter-mapper";
+import { QueryValidator } from "./query-validator";
 import { SortMapper } from "./sort-mapper";
 import {
   buildSelect,
@@ -25,10 +26,12 @@ import type { ViewMapper } from "./view-mapper";
 export class QueryMapper {
   private readonly filterMapper: FilterMapper;
   private readonly sortMapper: SortMapper;
+  private readonly validator: QueryValidator;
 
   constructor(private readonly viewMapper: ViewMapper) {
     this.filterMapper = new FilterMapper(viewMapper);
     this.sortMapper = new SortMapper();
+    this.validator = new QueryValidator(viewMapper);
   }
 
   async map<TModel>(options: QueryOptions<TModel>): Promise<InstancesQueryRequest> {
@@ -43,6 +46,7 @@ export class QueryMapper {
     const limit = requestedLimit === -1 ? DEFAULT_LIMIT : requestedLimit;
 
     const rootView = await this.viewMapper.getView(viewExternalId);
+    await this.validator.validate(options, rootView);
     const rootViewRef = toViewReference(rootView);
 
     const whereFilters = filters

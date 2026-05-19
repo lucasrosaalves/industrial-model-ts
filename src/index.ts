@@ -2,6 +2,7 @@ export { IndustrialModelClient } from "./client";
 export type {
   DataModelId,
   IndustrialModel,
+  IndustrialModelClientOptions,
   ModelProps,
   ModelRelations,
   NodeId,
@@ -11,3 +12,5 @@ export type {
   QueryResultMetadata,
   QuerySelect,
 } from "./types";
+export type { BuildViewSchemaOptions } from "./validation";
+export { buildViewSchema, nodeIdSchema } from "./validation";

@@ -14,6 +14,10 @@ export type SortDirection = "ascending" | "descending";
 
 export type QueryResultMap = Record<string, NodeOrEdge[]>;
 
+export interface IndustrialModelClientOptions {
+  validateResults?: boolean;
+}
+
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 type Merge<A, B> = Simplify<Omit<A, keyof B> & B>;
 type NonNull<T> = Exclude<T, null | undefined>;
@@ -110,7 +114,7 @@ export interface QueryOptions<
 
 export type QueryResultMetadata = Pick<
   NodeDefinition,
-  "space" | "externalId" | "createdTime" | "deletedTime" | "lastUpdatedTime"
+  "space" | "externalId" | "version" | "createdTime" | "deletedTime" | "lastUpdatedTime"
 >;
 
 type ResultShapeForKey<TModel, K extends PropertyKey> = K extends keyof ModelProps<TModel>
@@ -130,6 +134,8 @@ type WrapResultValue<TShape, TValue> = [NonNull<TShape>] extends [readonly unkno
   ? TValue[]
   : TValue;
 
+type AsQuerySelect<TModel, TSelect> = TSelect extends QuerySelect<TModel> ? TSelect : never;
+
 type SelectedValue<
   TModel,
   K extends PropertyKey,
@@ -146,8 +152,7 @@ type SelectedValue<
           ResultShapeForKey<TModel, K>,
           QueryResultItem<
             UnwrapRelationTarget<ResultEntityForKey<TModel, K>>,
-            TValue &
-              QuerySelect<UnwrapRelationTarget<ResultEntityForKey<TModel, K>>, PrevDepth[TDepth]>,
+            AsQuerySelect<UnwrapRelationTarget<ResultEntityForKey<TModel, K>>, TValue>,
             PrevDepth[TDepth]
           >
         >
@@ -194,6 +199,17 @@ export interface QueryResult<TItem = Record<string, unknown>> {
   items: TItem[];
   cursor: string | null;
 }
+
+export type QueryExecutor<TModel> = {
+  <const TSelect extends QuerySelect<TModel>>(
+    options: Omit<QueryOptions<TModel, TSelect>, "select"> & {
+      select: TSelect & QuerySelect<TModel>;
+    },
+  ): Promise<QueryResult<QueryResultItem<TModel, TSelect>>>;
+  (
+    options: Omit<QueryOptions<TModel, undefined>, "select"> & { select?: undefined },
+  ): Promise<QueryResult<QueryResultItem<TModel, undefined>>>;
+};
 
 export type StringFilters = {
   eq?: string;

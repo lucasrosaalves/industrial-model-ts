@@ -111,6 +111,7 @@ export interface InstancesQueryRequest {
 
 export interface NodeDefinition {
   instanceType: "node";
+  version?: number;
   space: string;
   externalId: string;
   properties?: Record<string, Record<string, Record<string, unknown>>>;

@@ -11,7 +11,7 @@ export function makeCogniteAssetQueryResult(): QueryResultMap {
     externalId: "parent-asset",
     properties: {
       [SPACE]: {
-        [ASSET_VIEW_KEY]: { name: "Parent Asset" },
+        [ASSET_VIEW_KEY]: { name: "Parent Asset", description: "Parent Description" },
       },
     },
   };
@@ -34,4 +34,24 @@ export function makeCogniteAssetQueryResult(): QueryResultMap {
     CogniteAsset: [assetNode],
     "CogniteAsset|parent": [parentNode],
   };
+}
+
+export function makeCogniteAssetQueryResultWithProperties(
+  properties: Record<string, unknown>,
+): QueryResultMap {
+  const result = makeCogniteAssetQueryResult();
+  const asset = result.CogniteAsset?.[0];
+  if (asset?.instanceType === "node") {
+    asset.properties = {
+      ...asset.properties,
+      [SPACE]: {
+        ...asset.properties?.[SPACE],
+        [ASSET_VIEW_KEY]: {
+          ...asset.properties?.[SPACE]?.[ASSET_VIEW_KEY],
+          ...properties,
+        },
+      },
+    };
+  }
+  return result;
 }
