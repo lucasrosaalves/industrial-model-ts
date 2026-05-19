@@ -114,7 +114,7 @@ export interface QueryOptions<
 
 export type QueryResultMetadata = Pick<
   NodeDefinition,
-  "space" | "externalId" | "createdTime" | "deletedTime" | "lastUpdatedTime"
+  "space" | "externalId" | "version" | "createdTime" | "deletedTime" | "lastUpdatedTime"
 >;
 
 type ResultShapeForKey<TModel, K extends PropertyKey> = K extends keyof ModelProps<TModel>
