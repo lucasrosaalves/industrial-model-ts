@@ -65,3 +65,34 @@ export function buildSelect(
   if (properties.length === 0) return {};
   return { sources: [{ source, properties }] };
 }
+
+const GROUPABLE_PROPERTY_TYPES = new Set([
+  "text",
+  "direct",
+  "int32",
+  "int64",
+  "float32",
+  "float64",
+  "boolean",
+  "enum",
+]);
+
+const NUMERIC_PROPERTY_TYPES = new Set(["int32", "int64", "float32", "float64"]);
+
+export function isGroupableProperty(property: ViewDefinitionProperty): boolean {
+  if (!isViewPropertyDefinition(property)) return false;
+  if (property.type.list === true) return false;
+  const type = property.type.type;
+  return type != null && GROUPABLE_PROPERTY_TYPES.has(type);
+}
+
+export function isNumericProperty(property: ViewPropertyDefinition): boolean {
+  const type = property.type.type;
+  return type != null && NUMERIC_PROPERTY_TYPES.has(type);
+}
+
+export function getSelectedGroupByKeys(groupBy: Record<string, boolean | undefined>): string[] {
+  return Object.entries(groupBy)
+    .filter((entry): entry is [string, true] => entry[1] === true)
+    .map(([key]) => key);
+}

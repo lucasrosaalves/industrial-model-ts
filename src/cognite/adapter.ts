@@ -3,6 +3,8 @@ import type { CognitePort } from "./port";
 import type {
   DataModelId,
   DataModelRetrieveOptions,
+  InstancesAggregateRequest,
+  InstancesAggregateResponse,
   InstancesQueryRequest,
   InstancesQueryResponse,
   ViewDefinition,
@@ -32,6 +34,17 @@ class CogniteSdkAdapter implements CognitePort {
     return {
       items: response.items as unknown as InstancesQueryResponse["items"],
       nextCursor: response.nextCursor,
+    };
+  }
+
+  async aggregateInstances(
+    request: InstancesAggregateRequest,
+  ): Promise<InstancesAggregateResponse> {
+    const response = await this.client.instances.aggregate(
+      request as Parameters<CogniteClient["instances"]["aggregate"]>[0],
+    );
+    return {
+      items: response.items as unknown as InstancesAggregateResponse["items"],
     };
   }
 }

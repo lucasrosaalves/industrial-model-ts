@@ -1,10 +1,22 @@
-import { describe, expect, it } from "vitest";
-import { type IndustrialModel, IndustrialModelClient, type NodeId } from "../src/index.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  type AggregateDefinition,
+  type IndustrialModel,
+  IndustrialModelClient,
+  type NodeId,
+} from "../src/index.js";
 import {
   COGNITE_CORE_DATA_MODEL,
+  makeCogniteAssetAggregateByNameResponse,
+  makeCogniteAssetCountByNameResponse,
+  makeCogniteAssetDistinctSourceIdsResponse,
+  makeCogniteAssetGlobalCountResponse,
   makeCogniteAssetQueryResult,
   makeCogniteAssetQueryResultWithProperties,
   makeCogniteClientMock,
+  makeCogniteVolumeAggregateByTypeResponse,
+  makeCogniteVolumeGroupByObject3DResponse,
+  makeCogniteVolumeNumericAggregateResponse,
 } from "./fixtures/index.js";
 
 describe("IndustrialModelClient", () => {
@@ -122,6 +134,177 @@ describe("IndustrialModelClient", () => {
 
     expect(items[0]).toMatchObject({ name: "Root Asset" });
     expect(items[0]).not.toHaveProperty("sourceCreatedTime");
+  });
+
+  it("runs aggregate end-to-end with grouped count", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteAssetAggregateByNameResponse(),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Asset = IndustrialModel<{ name: string }>;
+    const { items } = await model.aggregate<Asset>()({
+      viewExternalId: "CogniteAsset",
+      groupBy: { name: true },
+      aggregate: { count: {} },
+      filters: { name: { prefix: "Root" } },
+    });
+
+    expect(client.dataModels.retrieve).toHaveBeenCalledOnce();
+    expect(client.instances.aggregate).toHaveBeenCalledOnce();
+    expect(client.instances.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instanceType: "node",
+        limit: 1000,
+        groupBy: ["name"],
+        aggregates: [{ count: {} }],
+      }),
+    );
+    expect(items).toHaveLength(2);
+    expect(items[0]).toMatchObject({
+      group: { name: "Root Asset" },
+      aggregate: { value: 3 },
+    });
+  });
+
+  it("runs aggregate with a global count", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteAssetGlobalCountResponse(),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Asset = IndustrialModel<{ name: string }>;
+    const { items } = await model.aggregate<Asset>()({
+      viewExternalId: "CogniteAsset",
+      aggregate: { count: {} },
+    });
+
+    expect(items).toHaveLength(1);
+    expect(items[0]?.aggregate?.value).toBe(42);
+    expect(items[0]).not.toHaveProperty("group");
+  });
+
+  it("runs aggregate with distinct values (groupBy only)", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteAssetDistinctSourceIdsResponse(),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Asset = IndustrialModel<{ sourceId: string }>;
+    const { items } = await model.aggregate<Asset>()({
+      viewExternalId: "CogniteAsset",
+      groupBy: { sourceId: true },
+    });
+
+    const aggregateRequest = vi.mocked(client.instances.aggregate).mock.calls[0]?.[0];
+    expect(aggregateRequest).toMatchObject({ groupBy: ["sourceId"] });
+    expect(aggregateRequest).not.toHaveProperty("aggregates");
+    expect(items).toHaveLength(2);
+    expect(items[0]?.group?.sourceId).toBe("sap-001");
+    expect(items[0]).not.toHaveProperty("aggregate");
+  });
+
+  it("runs aggregate with avg grouped by volumeType", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteVolumeAggregateByTypeResponse(),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Volume = IndustrialModel<{ volume: number; volumeType: string }>;
+    const { items } = await model.aggregate<Volume>()({
+      viewExternalId: "CognitePointCloudVolume",
+      groupBy: { volumeType: true },
+      aggregate: { avg: "volume" },
+    });
+
+    expect(client.instances.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aggregates: [{ avg: { property: "volume" } }],
+        groupBy: ["volumeType"],
+      }),
+    );
+    expect(items[0]).toMatchObject({
+      group: { volumeType: "Cylinder" },
+      aggregate: { property: "volume", value: 12.5 },
+    });
+  });
+
+  it.each([
+    ["min", 1.5],
+    ["max", 99],
+    ["sum", 250],
+  ] as const)("runs aggregate with %s on a numeric property", async (op, value) => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteVolumeNumericAggregateResponse(op, value),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Volume = IndustrialModel<{ volume: number }>;
+    const aggregate: AggregateDefinition<Volume> =
+      op === "min" ? { min: "volume" } : op === "max" ? { max: "volume" } : { sum: "volume" };
+    const { items } = await model.aggregate<Volume>()({
+      viewExternalId: "CognitePointCloudVolume",
+      aggregate,
+    });
+
+    expect(client.instances.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aggregates: [{ [op]: { property: "volume" } }],
+      }),
+    );
+    expect(items[0]?.aggregate).toEqual({ property: "volume", value });
+  });
+
+  it("runs aggregate with count on a property", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteAssetCountByNameResponse(),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Asset = IndustrialModel<{ name: string }>;
+    const { items } = await model.aggregate<Asset>()({
+      viewExternalId: "CogniteAsset",
+      aggregate: { count: "name" },
+    });
+
+    expect(client.instances.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aggregates: [{ count: { property: "name" } }],
+      }),
+    );
+    expect(items[0]?.aggregate).toEqual({ property: "name", value: 15 });
+  });
+
+  it("maps direct-relation values in groupBy results", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteVolumeGroupByObject3DResponse(),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Volume = IndustrialModel<{ volume: number; object3D?: NodeId }>;
+    const { items } = await model.aggregate<Volume>()({
+      viewExternalId: "CognitePointCloudVolume",
+      groupBy: { object3D: true },
+      aggregate: { sum: "volume" },
+    });
+
+    expect(items[0]?.group?.object3D).toEqual({
+      space: "cdf_3d_models",
+      externalId: "model-1",
+    });
+    expect(items[0]?.aggregate?.value).toBe(100);
+  });
+
+  it("throws when aggregate options are invalid", async () => {
+    const client = makeCogniteClientMock();
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Asset = IndustrialModel<{ name: string }>;
+    await expect(
+      model.aggregate<Asset>()({
+        viewExternalId: "CogniteAsset",
+      }),
+    ).rejects.toThrow(/Invalid aggregate options/);
   });
 
   it("throws when result validation finds an invalid Cognite timestamp", async () => {

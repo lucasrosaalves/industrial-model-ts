@@ -196,7 +196,7 @@ export class QueryValidator {
       errors.push(...(await this.validateSelect(options.select, rootView, ["select"])));
     }
     if (options.filters !== undefined) {
-      errors.push(...(await this.validateFilters(options.filters, rootView, ["filters"])));
+      errors.push(...(await this.validateWhereInput(options.filters, rootView, ["filters"])));
     }
     if (options.sort !== undefined) {
       errors.push(...this.validateSort(options.sort, rootView, ["sort"]));
@@ -277,6 +277,14 @@ export class QueryValidator {
     }
 
     return errors;
+  }
+
+  async validateWhereInput(
+    filters: unknown,
+    view: ViewDefinition,
+    path: Array<string | number>,
+  ): Promise<string[]> {
+    return this.validateFilters(filters, view, path);
   }
 
   private async validateFilters(

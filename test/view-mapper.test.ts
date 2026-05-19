@@ -31,6 +31,7 @@ describe("ViewMapper", () => {
     const cognite: CognitePort = {
       retrieveDataModels: vi.fn().mockResolvedValue({ items: [] }),
       queryInstances: vi.fn(),
+      aggregateInstances: vi.fn(),
     };
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     await expect(mapper.getView("ViewA")).rejects.toThrow("not found");
@@ -70,6 +71,7 @@ describe("ViewMapper", () => {
         ],
       }),
       queryInstances: vi.fn(),
+      aggregateInstances: vi.fn(),
     };
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     const view = await mapper.getView("NewView");

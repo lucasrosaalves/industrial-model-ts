@@ -1,6 +1,12 @@
 export { IndustrialModelClient } from "./client";
 export type {
+  AggregateDefinition,
+  AggregateGroupBy,
+  AggregateOptions,
+  AggregateResult,
+  AggregateResultItem,
   DataModelId,
+  GroupByKey,
   IndustrialModel,
   IndustrialModelClientOptions,
   ModelProps,
