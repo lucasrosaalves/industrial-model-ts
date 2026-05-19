@@ -78,7 +78,7 @@ export class IndustrialModelClient {
 
       const mappedPageResult = await this.resultMapper.mapNodes(viewExternalId, queryResultData);
       const pageResult = this.validateResults
-        ? await this.resultValidator.parseItems(viewExternalId, mappedPageResult)
+        ? await this.resultValidator.parseItems(viewExternalId, mappedPageResult, options.select)
         : mappedPageResult;
       const nextCursor = queryResult.nextCursor[viewExternalId] ?? null;
       const isLastPage = pageResult.length < limit || !nextCursor;

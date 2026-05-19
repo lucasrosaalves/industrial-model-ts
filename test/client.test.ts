@@ -78,6 +78,52 @@ describe("IndustrialModelClient", () => {
     expect(items[0]?.sourceCreatedTime.toISOString()).toBe("2024-01-02T03:04:05.000Z");
   });
 
+  it("preserves selected nested direct-relation properties when validating results", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: makeCogniteAssetQueryResult(),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, {
+      validateResults: true,
+    });
+
+    type ParentAsset = IndustrialModel<{ description: string }>;
+    type Asset = IndustrialModel<
+      { description?: string; parent?: NodeId },
+      { parent?: ParentAsset }
+    >;
+    const { items } = await model.query<Asset>()({
+      viewExternalId: "CogniteAsset",
+      select: { description: true, parent: { description: true } },
+    });
+
+    expect(items[0]).toMatchObject({
+      parent: {
+        externalId: "parent-asset",
+        description: "Parent Description",
+      },
+    });
+  });
+
+  it("validates only selected result properties when enabled", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: makeCogniteAssetQueryResultWithProperties({
+        sourceCreatedTime: "not-a-date",
+      }),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, {
+      validateResults: true,
+    });
+
+    type Asset = IndustrialModel<{ name: string; sourceCreatedTime: Date }>;
+    const { items } = await model.query<Asset>()({
+      viewExternalId: "CogniteAsset",
+      select: { name: true },
+    });
+
+    expect(items[0]).toMatchObject({ name: "Root Asset" });
+    expect(items[0]).not.toHaveProperty("sourceCreatedTime");
+  });
+
   it("throws when result validation finds an invalid Cognite timestamp", async () => {
     const client = makeCogniteClientMock({
       queryItems: makeCogniteAssetQueryResultWithProperties({

@@ -11,7 +11,7 @@ export function makeCogniteAssetQueryResult(): QueryResultMap {
     externalId: "parent-asset",
     properties: {
       [SPACE]: {
-        [ASSET_VIEW_KEY]: { name: "Parent Asset" },
+        [ASSET_VIEW_KEY]: { name: "Parent Asset", description: "Parent Description" },
       },
     },
   };
