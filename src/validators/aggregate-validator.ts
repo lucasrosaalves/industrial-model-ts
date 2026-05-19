@@ -1,16 +1,16 @@
 import { z } from "zod";
 import type { ViewDefinition } from "../cognite";
 import { MAX_GROUP_BY } from "../constants";
+import type { ViewMapper } from "../mappers/view-mapper";
 import type { AggregateDefinition, AggregateGroupBy, AggregateOptions } from "../types";
-import { QueryValidator } from "./query-validator";
 import {
   getDirectRelationSource,
   getSelectedGroupByKeys,
   isGroupableProperty,
   isNumericProperty,
   isViewPropertyDefinition,
-} from "./utils";
-import type { ViewMapper } from "./view-mapper";
+} from "../utils";
+import { QueryValidator } from "./query-validator";
 
 const NODE_COUNT_PROPERTIES = new Set(["externalId", "space"]);
 

@@ -10,7 +10,6 @@ import { AggregateMapper } from "./mappers/aggregate-mapper";
 import { AggregateResultMapper } from "./mappers/aggregate-result-mapper";
 import { QueryMapper } from "./mappers/query-mapper";
 import { QueryResultMapper } from "./mappers/result-mapper";
-import { QueryResultValidator } from "./mappers/result-validator";
 import { ViewMapper } from "./mappers/view-mapper";
 import type {
   AggregateExecutor,
@@ -31,6 +30,7 @@ import {
   getQueryForDependenciesPagination,
   mapNodesAndEdges,
 } from "./utils/query";
+import { QueryResultValidator } from "./validators";
 export class IndustrialModelClient {
   private readonly cognite: CognitePort;
   private readonly queryMapper: QueryMapper;

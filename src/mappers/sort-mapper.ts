@@ -1,6 +1,6 @@
 import type { PropertySort, ViewDefinition } from "../cognite";
 import type { SortDirection } from "../types";
-import { getPropertyRef, isDirectRelationWithSource } from "./utils";
+import { getPropertyRef, isDirectRelationWithSource } from "../utils";
 
 export class SortMapper {
   map(sort: Record<string, SortDirection>, rootView: ViewDefinition): PropertySort[] {

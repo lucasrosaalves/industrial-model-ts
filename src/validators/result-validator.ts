@@ -1,15 +1,15 @@
 import { z } from "zod";
 import type { ViewDefinition, ViewDefinitionProperty } from "../cognite";
 import { MAX_DEPENDENCY_DEPTH } from "../constants";
-import { propertyValueSchema } from "../validation";
+import type { ViewMapper } from "../mappers/view-mapper";
 import {
   getDirectRelationSource,
   isEdgeConnection,
   isListDirectRelation,
   isReverseDirectRelation,
   isViewPropertyDefinition,
-} from "./utils";
-import type { ViewMapper } from "./view-mapper";
+} from "../utils";
+import { propertyValueSchema } from "../validation";
 
 type ResultSelect = {
   _all?: true;

@@ -1,15 +1,15 @@
 import { z } from "zod";
 import type { ViewDefinition, ViewDefinitionProperty, ViewPropertyDefinition } from "../cognite";
 import { MAX_LIMIT } from "../constants";
+import type { ViewMapper } from "../mappers/view-mapper";
 import type { QueryOptions } from "../types";
-import { nodeIdSchema } from "../validation";
 import {
   getDirectRelationSource,
   isEdgeConnection,
   isReverseDirectRelation,
   isViewPropertyDefinition,
-} from "./utils";
-import type { ViewMapper } from "./view-mapper";
+} from "../utils";
+import { nodeIdSchema } from "../validation";
 
 const NODE_STRING_PROPERTIES = ["externalId", "space"] as const;
 const NODE_NUMBER_PROPERTIES = ["createdTime", "deletedTime", "lastUpdatedTime"] as const;
@@ -285,6 +285,13 @@ export class QueryValidator {
       if (target == null) {
         errors.push(
           `${issuePath([...path, name])}: property "${name}" does not support nested select`,
+        );
+        continue;
+      }
+
+      if (isReverseDirectRelation(property) && property.targetsList) {
+        errors.push(
+          `${issuePath([...path, name])}: cannot select "${name}" — Cognite does not support inward traversal of list direct relations. Query "${property.source.externalId}" directly and filter by the "${property.through.identifier}" field instead.`,
         );
         continue;
       }

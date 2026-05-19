@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildViewSchema } from "../src/index.js";
+import { buildViewSchema } from "../src/validation.js";
 import { getCogniteCoreView } from "./fixtures/index.js";
 
 describe("buildViewSchema", () => {

@@ -1,10 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import {
-  type AggregateDefinition,
-  type IndustrialModel,
-  IndustrialModelClient,
-  type NodeId,
-} from "../src/index.js";
+import { type IndustrialModel, IndustrialModelClient, type NodeId } from "../src/index.js";
+import type { AggregateDefinition } from "../src/types.js";
 import {
   COGNITE_CORE_DATA_MODEL,
   makeCogniteAssetAggregateByNameResponse,
