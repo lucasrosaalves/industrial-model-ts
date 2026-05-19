@@ -63,6 +63,7 @@ const { items } = await model.query<{ name: string; description: string }>()({
 | Filters | [AND/OR/NOT](#combine-filters-with-and--or--not), [Nested](#filter-on-related-nodes), [Tags](#filter-assets-by-tags), [Batch IDs](#filter-by-multiple-external-ids) |
 | Select & sort | [Select all scalars](#select-all-scalar-fields), [Multi-field sort](#sort-by-multiple-fields) |
 | Pagination | [Manual cursor loop](#paginate-through-all-assets), [Fetch all pages](#fetch-all-pages-automatically) |
+| Aggregation | [Count by group](#count-assets-by-source-id), [Distinct values](#list-distinct-source-ids), [Numeric aggregates](#average-volume-by-type), [Global count](#count-all-matching-assets) |
 | Advanced | [Custom data model](#use-a-custom-data-model), [Full query](#full-example-assets-equipment-and-filters) |
 
 All examples below use the [Cognite Core Data Model](https://docs.cognite.com/cdf/data_modeling/reference_data_models/cognite_core/), space `cdf_cdm`, version `v1`.
@@ -661,6 +662,135 @@ if (cursor) {
 
 ---
 
+### Count assets by source ID
+
+Group assets and count how many share each `sourceId`. Uses the same `filters` syntax as `query`.
+
+```ts
+const { items } = await model.aggregate<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  groupBy: { sourceId: true },
+  aggregate: { count: {} },
+  filters: { name: { prefix: "WMT" } },
+});
+
+for (const row of items) {
+  console.log(row.group?.sourceId, row.aggregate?.value);
+}
+```
+
+---
+
+### List distinct source IDs
+
+Omit `aggregate` to return unique combinations of the `groupBy` fields (up to 1000 groups).
+
+```ts
+const { items } = await model.aggregate<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  groupBy: { sourceId: true },
+});
+
+const sourceIds = items.map((row) => row.group?.sourceId);
+```
+
+---
+
+### Average volume by type
+
+Use `avg`, `min`, `max`, or `sum` on numeric view properties. Only one aggregate operation per call.
+
+```ts
+type PointCloudVolume = IndustrialModel<{
+  volume: number;
+  volumeType: string;
+}>;
+
+const { items } = await model.aggregate<PointCloudVolume>()({
+  viewExternalId: "CognitePointCloudVolume",
+  groupBy: { volumeType: true },
+  aggregate: { avg: "volume" },
+});
+
+items[0]?.group?.volumeType;
+items[0]?.aggregate?.property; // "volume"
+items[0]?.aggregate?.value;
+```
+
+Other numeric aggregates:
+
+```ts
+await model.aggregate<PointCloudVolume>()({
+  viewExternalId: "CognitePointCloudVolume",
+  aggregate: { min: "volume" },
+});
+
+await model.aggregate<PointCloudVolume>()({
+  viewExternalId: "CognitePointCloudVolume",
+  aggregate: { max: "volume" },
+});
+
+await model.aggregate<PointCloudVolume>()({
+  viewExternalId: "CognitePointCloudVolume",
+  aggregate: { sum: "volume" },
+});
+```
+
+---
+
+### Count non-null values for a property
+
+```ts
+const { items } = await model.aggregate<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  aggregate: { count: "name" },
+});
+
+items[0]?.aggregate?.property; // "name"
+items[0]?.aggregate?.value;
+```
+
+---
+
+### Count all matching assets
+
+A global count with no `groupBy`:
+
+```ts
+const { items } = await model.aggregate<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  aggregate: { count: {} },
+  filters: {
+    OR: [{ tags: { containsAny: ["critical"] } }, { sourceId: { eq: "sap" } }],
+  },
+});
+
+items[0]?.aggregate?.value;
+```
+
+---
+
+### Group by a direct relation
+
+`groupBy` supports direct relations; results are returned as `NodeId` objects.
+
+```ts
+type PointCloudVolume = IndustrialModel<{
+  volume: number;
+  object3D?: NodeId;
+}>;
+
+const { items } = await model.aggregate<PointCloudVolume>()({
+  viewExternalId: "CognitePointCloudVolume",
+  groupBy: { object3D: true },
+  aggregate: { sum: "volume" },
+});
+
+items[0]?.group?.object3D?.externalId;
+```
+
+---
+
 ## API
 
 ### Exports
@@ -672,6 +802,8 @@ if (cursor) {
 | `NodeId`, `DataModelId` | Instance and data-model identifiers |
 | `QueryOptions`, `QuerySelect`, `WhereInput`, `SortInput` | Query input types |
 | `QueryResult`, `QueryResultItem`, `QueryResultMetadata` | Query output types |
+| `AggregateOptions`, `AggregateGroupBy`, `AggregateDefinition` | Aggregate input types |
+| `AggregateResult`, `AggregateResultItem`, `GroupByKey` | Aggregate output types |
 | `buildViewSchema`, `nodeIdSchema` | Zod schemas built from Cognite view metadata |
 | `SortDirection` | `"ascending"` \| `"descending"` |
 
@@ -736,6 +868,39 @@ const { items } = await model.query<CogniteAsset>()({
 items[0]?.parent?.name;
 items[0]?.externalId;
 ```
+
+### `model.aggregate<TModel>()(options)`
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `viewExternalId` | `string` | The view to aggregate |
+| `groupBy` | `AggregateGroupBy<TModel>` | Optional. Object of groupable properties set to `true` (max 5) |
+| `filters` | `WhereInput<TModel>` | Same filter syntax as `query` |
+| `aggregate` | `AggregateDefinition<TModel>` | Optional. One of `avg`, `min`, `max`, `sum`, or `count` per call |
+
+Provide at least one of `groupBy` or `aggregate`. Omit `aggregate` to fetch distinct values for the grouped fields. The client always requests nodes with `limit: 1000`.
+
+`aggregate()` uses the same curried form as `query`. Each result item has the shape:
+
+```ts
+type AggregateResultItem = {
+  group?: { /* keys from groupBy */ };
+  aggregate?: { property?: string; value: number };
+};
+```
+
+When counting all rows, `aggregate` has only `value` (no `property`). When aggregating a field, `property` matches the name you passed in the request.
+
+| Aggregate | Input | Use case |
+|-----------|-------|----------|
+| `count` | `{ count: {} }` | Row count (optionally filtered) |
+| `count` | `{ count: "name" }` | Count non-null values for a property |
+| `avg` | `{ avg: "volume" }` | Average of a numeric property |
+| `min` | `{ min: "volume" }` | Minimum numeric value |
+| `max` | `{ max: "volume" }` | Maximum numeric value |
+| `sum` | `{ sum: "volume" }` | Sum of a numeric property |
+
+See [Count assets by source ID](#count-assets-by-source-id), [List distinct source IDs](#list-distinct-source-ids), and [Average volume by type](#average-volume-by-type) for full examples.
 
 ### Automatic query behavior
 

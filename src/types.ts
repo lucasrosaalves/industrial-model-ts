@@ -211,6 +211,85 @@ export type QueryExecutor<TModel> = {
   ): Promise<QueryResult<QueryResultItem<TModel, undefined>>>;
 };
 
+type GroupableValue<T> = [NonNull<T>] extends [NodeId]
+  ? true
+  : [NonNull<T>] extends [string | number | boolean]
+    ? true
+    : false;
+
+export type GroupByKey<TModel> = {
+  [K in keyof ModelProps<TModel>]: GroupableValue<ModelProps<TModel>[K]> extends true ? K : never;
+}[keyof ModelProps<TModel>];
+
+export type AggregateGroupBy<TModel> = {
+  [K in GroupByKey<TModel>]?: true;
+};
+
+export type NumericKey<TModel> = {
+  [K in keyof ModelProps<TModel>]: ModelProps<TModel>[K] extends number ? K : never;
+}[keyof ModelProps<TModel>];
+
+export type CountableKey<TModel> = GroupByKey<TModel> | "externalId" | "space";
+
+export type AggregateDefinition<TModel> =
+  | { avg: NumericKey<TModel> }
+  | { min: NumericKey<TModel> }
+  | { max: NumericKey<TModel> }
+  | { sum: NumericKey<TModel> }
+  | { count: CountableKey<TModel> | Record<string, never> };
+
+type SelectedGroupKeys<TGroupBy> = Extract<
+  {
+    [K in keyof TGroupBy & string]: TGroupBy[K] extends true ? K : never;
+  }[keyof TGroupBy & string],
+  string
+>;
+
+export type GroupValues<TModel, TGroupBy extends AggregateGroupBy<TModel> | undefined> =
+  TGroupBy extends AggregateGroupBy<TModel>
+    ? Simplify<Pick<ModelProps<TModel>, SelectedGroupKeys<TGroupBy> & keyof ModelProps<TModel>>>
+    : undefined;
+
+export type AggregateValue<TDef> = TDef extends { avg: infer P extends PropertyKey }
+  ? { property: P; value: number }
+  : TDef extends { min: infer P extends PropertyKey }
+    ? { property: P; value: number }
+    : TDef extends { max: infer P extends PropertyKey }
+      ? { property: P; value: number }
+      : TDef extends { sum: infer P extends PropertyKey }
+        ? { property: P; value: number }
+        : TDef extends { count: infer P }
+          ? Record<string, never> extends P
+            ? { value: number }
+            : { property: P; value: number }
+          : never;
+
+export interface AggregateOptions<TModel> {
+  viewExternalId: string;
+  filters?: WhereInput<TModel>;
+  groupBy?: AggregateGroupBy<TModel>;
+  aggregate?: AggregateDefinition<TModel>;
+}
+
+export type AggregateResultItem<
+  TModel,
+  TGroupBy extends AggregateGroupBy<TModel> | undefined = undefined,
+  TAggregate extends AggregateDefinition<TModel> | undefined = undefined,
+> = {
+  group?: GroupValues<TModel, TGroupBy>;
+  aggregate?: AggregateValue<TAggregate>;
+};
+
+export interface AggregateResult<TItem = Record<string, unknown>> {
+  items: TItem[];
+}
+
+export type AggregateExecutor<TModel> = <const TOptions extends AggregateOptions<TModel>>(
+  options: TOptions,
+) => Promise<
+  AggregateResult<AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregate"]>>
+>;
+
 export type StringFilters = {
   eq?: string;
   in?: string[];

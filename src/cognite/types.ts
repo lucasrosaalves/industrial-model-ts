@@ -144,4 +144,38 @@ export interface DataModelRetrieveOptions {
   inlineViews?: boolean;
 }
 
+export type AggregateFunctionName = "avg" | "min" | "max" | "sum" | "count";
+
+export type InstancesAggregateDefinition =
+  | { avg: { property: string } }
+  | { min: { property: string } }
+  | { max: { property: string } }
+  | { sum: { property: string } }
+  | { count: { property?: string } };
+
+export interface InstancesAggregateRequest {
+  view: ViewReference;
+  instanceType: "node";
+  limit: number;
+  filter?: FilterDefinition;
+  groupBy?: string[];
+  aggregates?: InstancesAggregateDefinition[];
+}
+
+export interface InstancesAggregateValue {
+  aggregate: AggregateFunctionName;
+  property?: string;
+  value?: number;
+}
+
+export interface InstancesAggregateResultItem {
+  aggregates: InstancesAggregateValue[];
+  group?: Record<string, string | number | boolean | { space: string; externalId: string }>;
+  instanceType: "node" | "edge";
+}
+
+export interface InstancesAggregateResponse {
+  items: InstancesAggregateResultItem[];
+}
+
 export type { DataModelId };

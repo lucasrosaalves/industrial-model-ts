@@ -38,6 +38,7 @@ export function makeCogniteMock(
   return {
     retrieveDataModels: vi.fn().mockResolvedValue(response),
     queryInstances: vi.fn(),
+    aggregateInstances: vi.fn(),
   };
 }
 
@@ -57,6 +58,7 @@ export function makeCogniteWithViews(views: ViewDefinition[], createdTime = 1000
 export function makeCogniteClientMock(options?: {
   queryItems?: QueryResultMap;
   nextCursor?: Record<string, string>;
+  aggregateResponse?: import("../../src/cognite").InstancesAggregateResponse;
 }): CogniteClient {
   return {
     dataModels: {
@@ -67,6 +69,7 @@ export function makeCogniteClientMock(options?: {
         items: options?.queryItems ?? {},
         nextCursor: options?.nextCursor ?? {},
       }),
+      aggregate: vi.fn().mockResolvedValue(options?.aggregateResponse ?? { items: [] }),
     },
   } as unknown as CogniteClient;
 }

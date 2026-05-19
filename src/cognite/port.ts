@@ -2,6 +2,8 @@ import type {
   DataModelId,
   DataModelRetrieveItem,
   DataModelRetrieveOptions,
+  InstancesAggregateRequest,
+  InstancesAggregateResponse,
   InstancesQueryRequest,
   InstancesQueryResponse,
 } from "./types";
@@ -13,4 +15,6 @@ export interface CognitePort {
   ): Promise<{ items: DataModelRetrieveItem[] }>;
 
   queryInstances(request: InstancesQueryRequest): Promise<InstancesQueryResponse>;
+
+  aggregateInstances(request: InstancesAggregateRequest): Promise<InstancesAggregateResponse>;
 }

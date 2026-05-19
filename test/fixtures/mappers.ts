@@ -1,3 +1,4 @@
+import { AggregateMapper } from "../../src/mappers/aggregate-mapper";
 import { FilterMapper } from "../../src/mappers/filter-mapper";
 import { QueryMapper } from "../../src/mappers/query-mapper";
 import { QueryResultMapper } from "../../src/mappers/result-mapper";
@@ -18,6 +19,10 @@ export function createFilterMapper(response?: RetrieveDataModelsResponse): Filte
 
 export function createQueryMapper(response?: RetrieveDataModelsResponse): QueryMapper {
   return new QueryMapper(createViewMapper(response));
+}
+
+export function createAggregateMapper(response?: RetrieveDataModelsResponse): AggregateMapper {
+  return new AggregateMapper(createViewMapper(response));
 }
 
 export function createResultMapper(response?: RetrieveDataModelsResponse): QueryResultMapper {

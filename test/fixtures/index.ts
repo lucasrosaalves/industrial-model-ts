@@ -1,4 +1,13 @@
 export {
+  makeCogniteAssetAggregateByNameResponse,
+  makeCogniteAssetCountByNameResponse,
+  makeCogniteAssetDistinctSourceIdsResponse,
+  makeCogniteAssetGlobalCountResponse,
+  makeCogniteVolumeAggregateByTypeResponse,
+  makeCogniteVolumeGroupByObject3DResponse,
+  makeCogniteVolumeNumericAggregateResponse,
+} from "./aggregate-responses.js";
+export {
   COGNITE_CORE_DATA_MODEL,
   getCogniteCoreDataModelResponse,
   getCogniteCoreView,
@@ -10,6 +19,7 @@ export {
   type RetrieveDataModelsResponse,
 } from "./cognite-core.js";
 export {
+  createAggregateMapper,
   createFilterMapper,
   createQueryMapper,
   createResultMapper,

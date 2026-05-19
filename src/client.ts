@@ -6,11 +6,17 @@ import {
   type InstancesQueryResponse,
 } from "./cognite";
 import { DEFAULT_LIMIT, MAX_DEPENDENCY_DEPTH } from "./constants";
+import { AggregateMapper } from "./mappers/aggregate-mapper";
+import { AggregateResultMapper } from "./mappers/aggregate-result-mapper";
 import { QueryMapper } from "./mappers/query-mapper";
 import { QueryResultMapper } from "./mappers/result-mapper";
 import { QueryResultValidator } from "./mappers/result-validator";
 import { ViewMapper } from "./mappers/view-mapper";
 import type {
+  AggregateExecutor,
+  AggregateOptions,
+  AggregateResult,
+  AggregateResultItem,
   DataModelId,
   IndustrialModelClientOptions,
   QueryExecutor,
@@ -28,6 +34,8 @@ import {
 export class IndustrialModelClient {
   private readonly cognite: CognitePort;
   private readonly queryMapper: QueryMapper;
+  private readonly aggregateMapper: AggregateMapper;
+  private readonly aggregateResultMapper: AggregateResultMapper;
   private readonly resultMapper: QueryResultMapper;
   private readonly resultValidator: QueryResultValidator;
   private readonly validateResults: boolean;
@@ -41,6 +49,8 @@ export class IndustrialModelClient {
     this.cognite = cognite;
     const viewMapper = new ViewMapper(cognite, dataModelId);
     this.queryMapper = new QueryMapper(viewMapper);
+    this.aggregateMapper = new AggregateMapper(viewMapper);
+    this.aggregateResultMapper = new AggregateResultMapper();
     this.resultMapper = new QueryResultMapper(viewMapper);
     this.resultValidator = new QueryResultValidator(viewMapper);
     this.validateResults = options.validateResults ?? false;
@@ -52,6 +62,30 @@ export class IndustrialModelClient {
     ): Promise<QueryResult<QueryResultItem<TModel, TSelect>>> => this.queryInternal(options);
 
     return execute as unknown as QueryExecutor<TModel>;
+  }
+
+  aggregate<TModel>(): AggregateExecutor<TModel> {
+    const execute = <const TOptions extends AggregateOptions<TModel>>(
+      options: TOptions,
+    ): Promise<
+      AggregateResult<AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregate"]>>
+    > => this.aggregateInternal(options);
+
+    return execute as unknown as AggregateExecutor<TModel>;
+  }
+
+  private async aggregateInternal<TModel, const TOptions extends AggregateOptions<TModel>>(
+    options: TOptions,
+  ): Promise<
+    AggregateResult<AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregate"]>>
+  > {
+    const cogniteRequest = await this.aggregateMapper.map(options);
+    const response = await this.cognite.aggregateInstances(cogniteRequest);
+    const items = this.aggregateResultMapper.map<TModel, TOptions["groupBy"]>(
+      response,
+      options,
+    ) as AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregate"]>[];
+    return { items };
   }
 
   private async queryInternal<TModel, TSelect extends QuerySelect<TModel> | undefined = undefined>(
