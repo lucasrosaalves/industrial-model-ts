@@ -9,14 +9,20 @@ import { DEFAULT_LIMIT, MAX_DEPENDENCY_DEPTH } from "./constants";
 import { QueryMapper } from "./mappers/query-mapper";
 import { QueryResultMapper } from "./mappers/result-mapper";
 import { ViewMapper } from "./mappers/view-mapper";
-import type { DataModelId, QueryOptions, QueryResult, QueryResultMap } from "./types";
+import type {
+  DataModelId,
+  QueryOptions,
+  QueryResult,
+  QueryResultItem,
+  QueryResultMap,
+  QuerySelect,
+} from "./types";
 import {
   appendNodesAndEdges,
   getQueryForDependenciesPagination,
   mapNodesAndEdges,
 } from "./utils/query";
-
-export class IndustrialModel {
+export class IndustrialModelClient {
   private readonly cognite: CognitePort;
   private readonly queryMapper: QueryMapper;
   private readonly resultMapper: QueryResultMapper;
@@ -29,11 +35,19 @@ export class IndustrialModel {
     this.resultMapper = new QueryResultMapper(viewMapper);
   }
 
-  async query<T, TRelation = never>(options: QueryOptions<T, TRelation>): Promise<QueryResult> {
+  query<TModel>() {
+    return <const TSelect extends QuerySelect<TModel> | undefined = undefined>(
+      options: QueryOptions<TModel, TSelect>,
+    ): Promise<QueryResult<QueryResultItem<TModel, TSelect>>> => this.queryInternal(options);
+  }
+
+  private async queryInternal<TModel, TSelect extends QuerySelect<TModel> | undefined = undefined>(
+    options: QueryOptions<TModel, TSelect>,
+  ): Promise<QueryResult<QueryResultItem<TModel, TSelect>>> {
     const { viewExternalId, limit = DEFAULT_LIMIT } = options;
     const allPages = options.limit === -1;
     const cogniteQuery = await this.queryMapper.map(options);
-    const data: Record<string, unknown>[] = [];
+    const data: QueryResultItem<TModel, TSelect>[] = [];
 
     while (true) {
       const queryResult = await this.cognite.queryInstances(cogniteQuery);
@@ -51,10 +65,10 @@ export class IndustrialModel {
 
       const pageResult = await this.resultMapper.mapNodes(viewExternalId, queryResultData);
       const nextCursor = queryResult.nextCursor[viewExternalId] ?? null;
-      data.push(...pageResult);
-
       const isLastPage = pageResult.length < limit || !nextCursor;
       const resolvedCursor = isLastPage ? null : nextCursor;
+
+      data.push(...(pageResult as QueryResultItem<TModel, TSelect>[]));
 
       if (!isLastPage && resolvedCursor !== null) {
         cogniteQuery.cursors = { [viewExternalId]: resolvedCursor };
