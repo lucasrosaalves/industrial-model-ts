@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.5.0
+
+### Minor Changes
+
+- 3d73e09: Add text search filters to the SDK
+
 ## 0.4.0
 
 ### Minor Changes
