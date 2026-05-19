@@ -1,24 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { IndustrialModel } from "../src/index.js";
+import { type IndustrialModel, IndustrialModelClient, type NodeId } from "../src/index.js";
 import {
   COGNITE_CORE_DATA_MODEL,
   makeCogniteAssetQueryResult,
   makeCogniteClientMock,
 } from "./fixtures/index.js";
 
-describe("IndustrialModel", () => {
+describe("IndustrialModelClient", () => {
   it("is exported", () => {
-    expect(IndustrialModel).toBeDefined();
+    expect(IndustrialModelClient).toBeDefined();
   });
 
   it("runs query end-to-end with mocked CogniteClient (no API calls)", async () => {
     const client = makeCogniteClientMock({
       queryItems: makeCogniteAssetQueryResult(),
     });
-    const model = new IndustrialModel(client, COGNITE_CORE_DATA_MODEL);
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
 
-    type Asset = { name: string; parent?: { name: string } };
-    const { items, cursor } = await model.query<Asset>({
+    type ParentAsset = IndustrialModel<{ name: string }>;
+    type Asset = IndustrialModel<{ name: string; parent?: NodeId }, { parent?: ParentAsset }>;
+    const { items, cursor } = await model.query<Asset>()({
       viewExternalId: "CogniteAsset",
       select: {
         name: true,

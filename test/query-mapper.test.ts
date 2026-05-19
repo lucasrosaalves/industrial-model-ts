@@ -1,12 +1,49 @@
 import { describe, expect, it } from "vitest";
+import type { IndustrialModel, NodeId } from "../src/index.js";
 import { createQueryMapper, getCogniteCoreView } from "./fixtures/index.js";
+
+type AssetClass = IndustrialModel<{ name: string; code: string }>;
+type Asset = IndustrialModel<
+  {
+    name: string;
+    description?: string;
+    externalId?: string;
+    parent?: NodeId;
+    assetClass?: NodeId;
+  },
+  {
+    parent?: Asset;
+    assetClass?: AssetClass;
+    children?: Asset[];
+  }
+>;
+type Activity = IndustrialModel<{ name: string; equipment?: NodeId[] }>;
+type Equipment = IndustrialModel<
+  {
+    name: string;
+    asset?: NodeId;
+  },
+  {
+    asset?: Asset;
+    activities?: Activity[];
+  }
+>;
+type Image360 = IndustrialModel<{ takenAt: string }>;
+type Object3D = IndustrialModel<
+  {
+    name: string;
+  },
+  {
+    images360?: Image360[];
+  }
+>;
 
 describe("QueryMapper", () => {
   const mapper = createQueryMapper();
   const assetView = getCogniteCoreView("CogniteAsset");
 
   it("builds a root nodes query with hasData and limit", async () => {
-    const query = await mapper.map({
+    const query = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
       select: { name: true },
       limit: 10,
@@ -51,7 +88,6 @@ describe("QueryMapper", () => {
   });
 
   it("includes nested direct-relation select (parent)", async () => {
-    type Asset = { name: string; parent?: { name: string } };
     const query = await mapper.map<Asset>({
       viewExternalId: "CogniteAsset",
       select: {
@@ -82,8 +118,7 @@ describe("QueryMapper", () => {
   });
 
   it("includes reverse direct-relation select (children)", async () => {
-    type Asset = { name: string; children?: { name: string } };
-    const query = await mapper.map<Asset, { children: { name: string } }>({
+    const query = await mapper.map<Asset>({
       viewExternalId: "CogniteAsset",
       select: {
         name: true,
@@ -105,10 +140,10 @@ describe("QueryMapper", () => {
   });
 
   it("applies sort clauses on the root view", async () => {
-    const query = await mapper.map({
+    const query = await mapper.map<{ name: string; externalId?: string }>({
       viewExternalId: "CogniteAsset",
       select: { name: true },
-      sortClauses: { name: "ascending", externalId: "descending" },
+      sort: { name: "ascending", externalId: "descending" },
     });
 
     expect(query.with.CogniteAsset).toMatchObject({
@@ -128,7 +163,7 @@ describe("QueryMapper", () => {
   });
 
   it("passes cursor on the root table expression", async () => {
-    const query = await mapper.map({
+    const query = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
       select: { name: true },
       cursor: "cursor-abc",
@@ -138,7 +173,7 @@ describe("QueryMapper", () => {
   });
 
   it("passes empty-string cursor (only null/undefined are omitted)", async () => {
-    const query = await mapper.map({
+    const query = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
       select: { name: true },
       cursor: "",
@@ -148,12 +183,12 @@ describe("QueryMapper", () => {
   });
 
   it("omits cursor when null or undefined", async () => {
-    const withNull = await mapper.map({
+    const withNull = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
       select: { name: true },
       cursor: null,
     });
-    const withUndefined = await mapper.map({
+    const withUndefined = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
       select: { name: true },
       cursor: undefined as unknown as string,
@@ -165,7 +200,7 @@ describe("QueryMapper", () => {
 
   it("does not reference undefined views from the fixture", async () => {
     await expect(
-      mapper.map({
+      mapper.map<{ name: string }>({
         viewExternalId: "NonExistentView",
         select: { name: true },
       }),
@@ -183,10 +218,6 @@ describe("QueryMapper", () => {
     });
 
     it("builds two-level nested direct-relation chain (parent.assetClass)", async () => {
-      type Asset = {
-        name: string;
-        parent?: { assetClass?: { name: string; code: string } };
-      };
       const query = await mapper.map<Asset>({
         viewExternalId: "CogniteAsset",
         select: {
@@ -217,7 +248,6 @@ describe("QueryMapper", () => {
     });
 
     it("builds three-level self-referential chain (parent.parent)", async () => {
-      type Asset = { name: string; parent?: { parent?: { name: string } } };
       const query = await mapper.map<Asset>({
         viewExternalId: "CogniteAsset",
         select: {
@@ -243,7 +273,6 @@ describe("QueryMapper", () => {
     });
 
     it("includes direct relation on select without creating a nested with expression", async () => {
-      type Asset = { name: string; parent?: unknown };
       const query = await mapper.map<Asset>({
         viewExternalId: "CogniteAsset",
         select: { name: true, parent: true },
@@ -256,12 +285,7 @@ describe("QueryMapper", () => {
     });
 
     it("combines direct and reverse relations on CogniteEquipment", async () => {
-      type Equipment = {
-        name: string;
-        asset?: { name: string };
-        activities?: { name: string };
-      };
-      const query = await mapper.map<Equipment, { activities: { name: string } }>({
+      const query = await mapper.map<Equipment>({
         viewExternalId: "CogniteEquipment",
         select: {
           name: true,
@@ -298,8 +322,7 @@ describe("QueryMapper", () => {
     });
 
     it("builds edge connection traversal (Cognite3DObject.images360)", async () => {
-      type Object3D = { name: string; images360?: { takenAt: string } };
-      const query = await mapper.map<Object3D, { images360: { takenAt: string } }>({
+      const query = await mapper.map<Object3D>({
         viewExternalId: "Cognite3DObject",
         select: {
           name: true,
@@ -333,10 +356,6 @@ describe("QueryMapper", () => {
     });
 
     it("maps nested filters through FilterMapper (parent.assetClass.code)", async () => {
-      type Asset = {
-        name: string;
-        parent?: { assetClass?: { code: string } };
-      };
       const query = await mapper.map<Asset>({
         viewExternalId: "CogniteAsset",
         select: { name: true },
@@ -367,10 +386,6 @@ describe("QueryMapper", () => {
     });
 
     it("combines AND filters on root and nested relations", async () => {
-      type Asset = {
-        name: string;
-        parent?: { name: string };
-      };
       const query = await mapper.map<Asset>({
         viewExternalId: "CogniteAsset",
         select: { name: true, parent: { name: true } },
@@ -402,17 +417,7 @@ describe("QueryMapper", () => {
     });
 
     it("maps a full query with nested selects, filters, sort, limit, and cursor", async () => {
-      type Asset = {
-        name: string;
-        description: string;
-        externalId: string;
-        parent?: {
-          name: string;
-          assetClass?: { name: string };
-        };
-        children?: { name: string };
-      };
-      const query = await mapper.map<Asset, { children: { name: string } }>({
+      const query = await mapper.map<Asset>({
         viewExternalId: "CogniteAsset",
         select: {
           name: true,
@@ -424,7 +429,7 @@ describe("QueryMapper", () => {
           name: { prefix: "WMT" },
           parent: { name: { exists: true } },
         },
-        sortClauses: { name: "ascending", externalId: "descending" },
+        sort: { name: "ascending", externalId: "descending" },
         limit: 25,
         cursor: "page-2",
       });

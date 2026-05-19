@@ -3,8 +3,8 @@ import type { SortDirection } from "../types";
 import { getPropertyRef, isDirectRelationWithSource } from "./utils";
 
 export class SortMapper {
-  map(sortClauses: Record<string, SortDirection>, rootView: ViewDefinition): PropertySort[] {
-    return Object.entries(sortClauses).map(([property, direction]) => ({
+  map(sort: Record<string, SortDirection>, rootView: ViewDefinition): PropertySort[] {
+    return Object.entries(sort).map(([property, direction]) => ({
       property: getPropertyRef(property, rootView),
       direction,
       nullsFirst: this.isNullsFirst(property, rootView, direction),

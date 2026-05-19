@@ -31,14 +31,12 @@ export class QueryMapper {
     this.sortMapper = new SortMapper();
   }
 
-  async map<T, TRelation = never>(
-    options: QueryOptions<T, TRelation>,
-  ): Promise<InstancesQueryRequest> {
+  async map<TModel>(options: QueryOptions<TModel>): Promise<InstancesQueryRequest> {
     const {
       viewExternalId,
       select = { _all: true },
       filters,
-      sortClauses = {},
+      sort = {},
       limit: requestedLimit = DEFAULT_LIMIT,
       cursor = null,
     } = options;
@@ -58,7 +56,7 @@ export class QueryMapper {
         nodes: {
           filter: { and: baseFilters } as TableExpressionFilter,
         },
-        sort: this.sortMapper.map(sortClauses, rootView),
+        sort: this.sortMapper.map(sort, rootView),
         limit,
       },
     };
@@ -80,15 +78,15 @@ export class QueryMapper {
     return { with: withExprs, select: selectExprs, cursors };
   }
 
-  private async includeStatements<T, TRelation = never>(
+  private async includeStatements<TModel>(
     key: string,
     view: ViewDefinition,
-    select: QuerySelect<T, TRelation>,
+    select: QuerySelect<TModel>,
     withExprs: Record<string, QueryTableExpression>,
     selectExprs: Record<string, QuerySelectExpression | Record<string, never>>,
   ): Promise<string[]> {
     const selectProperties: string[] = [];
-    const selectRecord = select as Record<string, boolean | QuerySelect<T> | undefined>;
+    const selectRecord = select as Record<string, boolean | object | undefined>;
     for (const [propertyName, property] of Object.entries(view.properties)) {
       const propertyKey = `${key}${NESTED_SEP}${propertyName}`;
 
