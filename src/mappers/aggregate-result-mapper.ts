@@ -31,6 +31,9 @@ export class AggregateResultMapper {
             ? { space: value.space, externalId: value.externalId }
             : value;
         }
+        if (Object.keys(group).length === 0) {
+          group = undefined;
+        }
       }
 
       const aggregateValue = item.aggregates[0];

@@ -78,6 +78,29 @@ describe("AggregateResultMapper", () => {
     expect(items[0]?.aggregate).toEqual({ property: "volume", value: 100 });
   });
 
+  it("omits group when all grouped values are undefined", () => {
+    const response: InstancesAggregateResponse = {
+      items: [
+        {
+          instanceType: "node",
+          group: {
+            // @ts-expect-error API may return undefined for missing group values at runtime
+            sourceId: undefined,
+          },
+          aggregates: [{ aggregate: "count", value: 1 }],
+        },
+      ],
+    };
+
+    const items = mapper.map(response, {
+      groupBy: { sourceId: true },
+      aggregate: { count: {} },
+    });
+
+    expect(items[0]).toEqual({ aggregate: { value: 1 } });
+    expect(items[0]).not.toHaveProperty("group");
+  });
+
   it("returns distinct-value rows without aggregate", () => {
     const response: InstancesAggregateResponse = {
       items: [
