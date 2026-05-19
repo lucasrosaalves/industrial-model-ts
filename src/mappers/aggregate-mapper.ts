@@ -1,4 +1,5 @@
 import type {
+  CognitePort,
   FilterDefinition,
   InstancesAggregateDefinition,
   InstancesAggregateRequest,
@@ -14,8 +15,11 @@ export class AggregateMapper {
   private readonly filterMapper: FilterMapper;
   private readonly validator: AggregateValidator;
 
-  constructor(private readonly viewMapper: ViewMapper) {
-    this.filterMapper = new FilterMapper(viewMapper);
+  constructor(
+    private readonly viewMapper: ViewMapper,
+    cognite: CognitePort,
+  ) {
+    this.filterMapper = new FilterMapper(viewMapper, cognite);
     this.validator = new AggregateValidator(viewMapper);
   }
 

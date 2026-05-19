@@ -290,10 +290,13 @@ export type AggregateExecutor<TModel> = <const TOptions extends AggregateOptions
   AggregateResult<AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregate"]>>
 >;
 
+export type SearchFilter = { query: string; operator?: "OR" | "AND" };
+
 export type StringFilters = {
   eq?: string;
   in?: string[];
   prefix?: string;
+  search?: SearchFilter;
   exists?: boolean;
 };
 export type NumberFilters = {
@@ -321,7 +324,7 @@ export type ListFilters<T> = {
   containsAny?: T[];
   containsAll?: T[];
   exists?: boolean;
-};
+} & (T extends string ? { search?: SearchFilter } : unknown);
 
 type BaseFilterFor<T> = T extends NodeId
   ? NodeIdFilters

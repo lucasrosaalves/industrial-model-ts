@@ -1,5 +1,11 @@
-import type { FilterDefinition, ViewDefinition } from "../cognite";
-import { getDirectRelationSource, getPropertyRef, isViewPropertyDefinition } from "./utils";
+import type { CognitePort, FilterDefinition, ViewDefinition } from "../cognite";
+import type { SearchFilter } from "../types";
+import {
+  getDirectRelationSource,
+  getPropertyRef,
+  isViewPropertyDefinition,
+  toViewReference,
+} from "./utils";
 import type { ViewMapper } from "./view-mapper";
 
 const LEAF_OPS = new Set([
@@ -20,11 +26,15 @@ function isLeafFilter(value: Record<string, unknown>): boolean {
 }
 
 export class FilterMapper {
-  constructor(private readonly viewMapper: ViewMapper) {}
+  constructor(
+    private readonly viewMapper: ViewMapper,
+    private readonly cognite: CognitePort,
+  ) {}
 
   async map(input: Record<string, unknown>, rootView: ViewDefinition): Promise<FilterDefinition[]> {
     const result: FilterDefinition[] = [];
 
+    const searchQueries: Record<string, SearchFilter> = {};
     for (const [key, value] of Object.entries(input)) {
       if (value == null) continue;
 
@@ -47,9 +57,13 @@ export class FilterMapper {
       } else {
         const filterValue = value as Record<string, unknown>;
         const property = getPropertyRef(key, rootView);
-        if (isLeafFilter(filterValue)) {
+        const hasLeafFilter = isLeafFilter(filterValue);
+        if (hasLeafFilter) {
           result.push(...this.leafToFilterDefs(property, filterValue));
-        } else {
+        }
+        if ("search" in filterValue && filterValue.search != null) {
+          searchQueries[key] = filterValue.search as SearchFilter;
+        } else if (!hasLeafFilter) {
           const targetView = await this.getNestedTargetView(key, rootView);
           const innerFilter = await this.whereInputToSingle(filterValue, targetView);
           result.push({ nested: { scope: property, filter: innerFilter } });
@@ -57,7 +71,36 @@ export class FilterMapper {
       }
     }
 
+    if (Object.keys(searchQueries).length > 0) {
+      const searchFilters = await Promise.all(
+        Object.entries(searchQueries).map(([key, filterValue]) =>
+          this.searchToFilterDef(key, filterValue, rootView),
+        ),
+      );
+      result.push(...searchFilters);
+    }
+
     return result;
+  }
+
+  private async searchToFilterDef(
+    propertyName: string,
+    search: SearchFilter,
+    rootView: ViewDefinition,
+  ): Promise<FilterDefinition> {
+    const response = await this.cognite.searchInstances({
+      view: toViewReference(rootView),
+      query: search.query,
+      instanceType: "node",
+      properties: [propertyName],
+      operator: search.operator ?? "OR",
+      limit: 1_000,
+    });
+    const instanceRefs = response.items.map((item) => ({
+      space: item.space,
+      externalId: item.externalId,
+    }));
+    return { instanceReferences: instanceRefs };
   }
 
   private async whereInputToSingle(

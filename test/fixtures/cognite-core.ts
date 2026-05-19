@@ -1,6 +1,11 @@
 import type { CogniteClient } from "@cognite/sdk";
 import { vi } from "vitest";
-import type { CognitePort, DataModelRetrieveItem, ViewDefinition } from "../../src/cognite";
+import type {
+  CognitePort,
+  DataModelRetrieveItem,
+  InstancesSearchResponse,
+  ViewDefinition,
+} from "../../src/cognite";
 import type { DataModelId, QueryResultMap } from "../../src/types";
 import cogniteCoreDataModelJson from "./cognite-core-data-model.json";
 
@@ -38,6 +43,7 @@ export function makeCogniteMock(
   return {
     retrieveDataModels: vi.fn().mockResolvedValue(response),
     queryInstances: vi.fn(),
+    searchInstances: vi.fn(),
     aggregateInstances: vi.fn(),
   };
 }
@@ -58,6 +64,7 @@ export function makeCogniteWithViews(views: ViewDefinition[], createdTime = 1000
 export function makeCogniteClientMock(options?: {
   queryItems?: QueryResultMap;
   nextCursor?: Record<string, string>;
+  searchResponse?: InstancesSearchResponse;
   aggregateResponse?: import("../../src/cognite").InstancesAggregateResponse;
 }): CogniteClient {
   return {
@@ -69,6 +76,7 @@ export function makeCogniteClientMock(options?: {
         items: options?.queryItems ?? {},
         nextCursor: options?.nextCursor ?? {},
       }),
+      search: vi.fn().mockResolvedValue(options?.searchResponse ?? { items: [] }),
       aggregate: vi.fn().mockResolvedValue(options?.aggregateResponse ?? { items: [] }),
     },
   } as unknown as CogniteClient;

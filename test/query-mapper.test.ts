@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { IndustrialModel, NodeId } from "../src/index.js";
-import { createQueryMapper, getCogniteCoreView } from "./fixtures/index.js";
+import { QueryMapper } from "../src/mappers/query-mapper";
+import {
+  createQueryMapper,
+  createViewMapper,
+  getCogniteCoreView,
+  makeCogniteMock,
+} from "./fixtures/index.js";
 
 type AssetClass = IndustrialModel<{ name: string; code: string }>;
 type Asset = IndustrialModel<
@@ -84,6 +90,58 @@ describe("QueryMapper", () => {
     const rootWith = query.with.CogniteAsset as { nodes: { filter: { and: unknown[] } } };
     expect(rootWith.nodes.filter.and).toContainEqual({
       equals: { property: ["cdf_cdm", "CogniteAsset/v1", "name"], value: "Pump" },
+    });
+  });
+
+  it("maps text search filters into instance references on the root query", async () => {
+    const cognite = makeCogniteMock();
+    cognite.searchInstances = vi.fn().mockResolvedValue({
+      items: [{ instanceType: "node", space: "asset-space", externalId: "asset-1" }],
+    });
+    const searchMapper = new QueryMapper(createViewMapper(), cognite);
+
+    const query = await searchMapper.map<{ name: string }>({
+      viewExternalId: "CogniteAsset",
+      select: { name: true },
+      filters: { name: { search: { query: "pump motor", operator: "AND" } } },
+    });
+
+    expect(cognite.searchInstances).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "pump motor",
+        operator: "AND",
+        properties: ["name"],
+      }),
+    );
+    const rootWith = query.with.CogniteAsset as { nodes: { filter: { and: unknown[] } } };
+    expect(rootWith.nodes.filter.and).toContainEqual({
+      instanceReferences: [{ space: "asset-space", externalId: "asset-1" }],
+    });
+  });
+
+  it("allows search filters on text list properties", async () => {
+    const cognite = makeCogniteMock();
+    cognite.searchInstances = vi.fn().mockResolvedValue({
+      items: [{ instanceType: "node", space: "asset-space", externalId: "tagged-asset" }],
+    });
+    const searchMapper = new QueryMapper(createViewMapper(), cognite);
+
+    const query = await searchMapper.map<{ tags: string[] }>({
+      viewExternalId: "CogniteAsset",
+      select: { tags: true },
+      filters: { tags: { search: { query: "critical" } } },
+    });
+
+    expect(cognite.searchInstances).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "critical",
+        operator: "OR",
+        properties: ["tags"],
+      }),
+    );
+    const rootWith = query.with.CogniteAsset as { nodes: { filter: { and: unknown[] } } };
+    expect(rootWith.nodes.filter.and).toContainEqual({
+      instanceReferences: [{ space: "asset-space", externalId: "tagged-asset" }],
     });
   });
 
@@ -253,6 +311,42 @@ describe("QueryMapper", () => {
           filters: { name: { eq: 42 } } as never,
         }),
       ).rejects.toThrow(/filters\.name\.eq/);
+    });
+
+    it("rejects search filters on node metadata properties", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          filters: { externalId: { search: { query: "asset" } } } as never,
+        }),
+      ).rejects.toThrow(/filters\.externalId: Unrecognized key: "search"/);
+    });
+
+    it("rejects search filters on non-text properties", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          filters: { parent: { search: { query: "asset" } } } as never,
+        }),
+      ).rejects.toThrow(/filters\.parent: Unrecognized key: "search"/);
+    });
+
+    it("rejects search filters with missing query text", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          filters: { name: { search: { operator: "AND" } } } as never,
+        }),
+      ).rejects.toThrow(/filters\.name\.search\.query/);
+    });
+
+    it("rejects search filters with unsupported operators", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          filters: { name: { search: { query: "asset", operator: "NEAR" } } } as never,
+        }),
+      ).rejects.toThrow(/filters\.name\.search\.operator/);
     });
 
     it("rejects unknown sort properties", async () => {

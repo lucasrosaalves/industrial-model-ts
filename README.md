@@ -6,6 +6,7 @@ TypeScript SDK for querying [Cognite Flexible Data Models (FDM)](https://docs.co
 
 - **Type-safe queries** — define your data model types once, get compile-time validation on filters, selects, and sorts
 - **Relation traversal** — query nested relations (edges/nodes) up to 3 levels deep with automatic pagination
+- **Text search filters** — use Cognite `instances.search` from query and aggregate filters on text fields
 - **Dual CJS/ESM** — works in Node.js and bundlers out of the box
 - **Cursor-based pagination** — built-in support for iterating large result sets
 
@@ -60,7 +61,7 @@ const { items } = await model.query<{ name: string; description: string }>()({
 | Setup & types | [Shared type definitions](#shared-type-definitions) |
 | Basic queries | [Query assets](#query-assets), [Single asset](#query-a-single-asset-by-externalid) |
 | Relations | [Parent/root](#query-assets-with-parent-and-root-relations), [Path](#query-assets-with-their-full-path), [Children](#query-child-assets-reverse-relation), [Edges](#traverse-edge-relations-360-images-on-3d-objects) |
-| Filters | [AND/OR/NOT](#combine-filters-with-and--or--not), [Nested](#filter-on-related-nodes), [Tags](#filter-assets-by-tags), [Batch IDs](#filter-by-multiple-external-ids) |
+| Filters | [AND/OR/NOT](#combine-filters-with-and--or--not), [Text search](#search-text-fields), [Nested](#filter-on-related-nodes), [Tags](#filter-assets-by-tags), [Batch IDs](#filter-by-multiple-external-ids) |
 | Select & sort | [Select all scalars](#select-all-scalar-fields), [Multi-field sort](#sort-by-multiple-fields) |
 | Pagination | [Manual cursor loop](#paginate-through-all-assets), [Fetch all pages](#fetch-all-pages-automatically) |
 | Aggregation | [Count by group](#count-assets-by-source-id), [Distinct values](#list-distinct-source-ids), [Numeric aggregates](#average-volume-by-type), [Global count](#count-all-matching-assets) |
@@ -464,6 +465,52 @@ const fullyTagged = await model.query<CogniteAsset>()({
   select: { name: true, tags: true },
   filters: { tags: { containsAll: ["production", "verified"] } },
   limit: 100,
+});
+```
+
+---
+
+### Search text fields
+
+Use `search` on text properties and string-list text properties when you want Cognite full-text matching instead of exact or prefix filters. The optional `operator` is passed to Cognite search and defaults to `"OR"`; use `"AND"` when every term should match.
+
+```ts
+const { items } = await model.query<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  select: { name: true, description: true, tags: true },
+  filters: {
+    name: { search: { query: "root pump", operator: "AND" } },
+    tags: { search: { query: "critical" } },
+  },
+  limit: 100,
+});
+```
+
+Search filters can be combined with normal field operators. The SDK first calls Cognite `instances.search`, then adds the returned node references to the regular query filter.
+
+```ts
+const pumps = await model.query<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  select: { name: true, sourceId: true },
+  filters: {
+    name: {
+      prefix: "Pump",
+      search: { query: "motor" },
+    },
+    sourceId: { exists: true },
+  },
+});
+```
+
+The same filter syntax is also supported by `aggregate`:
+
+```ts
+const { items } = await model.aggregate<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  aggregate: { count: {} },
+  filters: {
+    name: { search: { query: "compressor seal" } },
+  },
 });
 ```
 
@@ -912,14 +959,17 @@ See [Count assets by source ID](#count-assets-by-source-id), [List distinct sour
 
 | Type | Operators |
 |------|-----------|
-| `string` | `eq`, `in`, `prefix`, `exists` |
+| `string` | `eq`, `in`, `prefix`, `search`, `exists` |
 | `number` | `eq`, `in`, `gt`, `gte`, `lt`, `lte`, `exists` |
 | `boolean` | `eq`, `exists` |
 | timestamp / `Date` | `eq`, `in`, `gt`, `gte`, `lt`, `lte`, `exists` — use ISO strings or `Date` values (coerced to ISO) |
 | `NodeId` | `eq`, `in`, `exists` |
+| `string[]` | `containsAny`, `containsAll`, `search`, `exists` |
 | `T[]` | `containsAny`, `containsAll`, `exists` |
 
 Logical combinators `AND`, `OR`, and `NOT` are supported at any nesting level, including inside nested relation filters (e.g. `parent: { OR: [...] }`).
+
+`search` is available for Cognite text properties and string-list text properties. It is not accepted on node metadata fields such as `externalId` or `space`. Each `search` filter uses `instances.search` with `limit: 1000`, maps the matched nodes to `instanceReferences`, and applies those references to the query or aggregate request.
 
 ### Relation traversal
 

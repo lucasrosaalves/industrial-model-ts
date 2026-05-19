@@ -14,15 +14,15 @@ export function createViewMapper(response?: RetrieveDataModelsResponse): ViewMap
 }
 
 export function createFilterMapper(response?: RetrieveDataModelsResponse): FilterMapper {
-  return new FilterMapper(createViewMapper(response));
+  return new FilterMapper(createViewMapper(response), makeCogniteMock(response));
 }
 
 export function createQueryMapper(response?: RetrieveDataModelsResponse): QueryMapper {
-  return new QueryMapper(createViewMapper(response));
+  return new QueryMapper(createViewMapper(response), makeCogniteMock(response));
 }
 
 export function createAggregateMapper(response?: RetrieveDataModelsResponse): AggregateMapper {
-  return new AggregateMapper(createViewMapper(response));
+  return new AggregateMapper(createViewMapper(response), makeCogniteMock(response));
 }
 
 export function createResultMapper(response?: RetrieveDataModelsResponse): QueryResultMapper {

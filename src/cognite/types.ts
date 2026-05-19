@@ -64,6 +64,7 @@ export type FilterDefinition =
   | { containsAll: { property: string[]; values: (string | number | boolean)[] } }
   | { containsAny: { property: string[]; values: (string | number | boolean)[] } }
   | { nested: { scope: string[]; filter: FilterDefinition } }
+  | { instanceReferences: Array<{ space: string; externalId: string }> }
   | { hasData: ViewReference[] };
 
 export type TableExpressionFilter = FilterDefinition | { and: FilterDefinition[] };
@@ -133,6 +134,20 @@ export type NodeOrEdge = NodeDefinition | EdgeDefinition;
 export interface InstancesQueryResponse {
   items: Record<string, NodeOrEdge[]>;
   nextCursor: Record<string, string>;
+}
+
+export interface InstancesSearchRequest {
+  view: ViewReference;
+  query: string;
+  instanceType: "node";
+  properties: string[];
+  operator?: "OR" | "AND";
+  filter?: FilterDefinition;
+  limit?: number;
+}
+
+export interface InstancesSearchResponse {
+  items: NodeOrEdge[];
 }
 
 export interface DataModelRetrieveItem {

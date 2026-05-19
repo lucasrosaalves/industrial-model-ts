@@ -1,4 +1,5 @@
 import type {
+  CognitePort,
   FilterDefinition,
   InstancesQueryRequest,
   QueryNodeTableExpression,
@@ -28,8 +29,11 @@ export class QueryMapper {
   private readonly sortMapper: SortMapper;
   private readonly validator: QueryValidator;
 
-  constructor(private readonly viewMapper: ViewMapper) {
-    this.filterMapper = new FilterMapper(viewMapper);
+  constructor(
+    private readonly viewMapper: ViewMapper,
+    cognite: CognitePort,
+  ) {
+    this.filterMapper = new FilterMapper(viewMapper, cognite);
     this.sortMapper = new SortMapper();
     this.validator = new QueryValidator(viewMapper);
   }
