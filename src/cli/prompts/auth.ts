@@ -2,7 +2,9 @@
  * Authentication prompts for Cognite Data Fusion.
  */
 
-import { input, password } from "@inquirer/prompts";
+import { input, password, select } from "@inquirer/prompts";
+import { browserLogin } from "../auth/login";
+import { extractAuthFromToken } from "../auth/token";
 
 export interface AuthOptions {
   token?: string;
@@ -15,23 +17,48 @@ export async function promptAuth(flags: AuthOptions): Promise<{
   project: string;
   baseUrl: string;
 }> {
-  const token =
-    flags.token ||
-    (await password({
-      message: "CDF bearer token:",
-    }));
+  let token: string;
+  let inferredProject: string | undefined;
+  let inferredBaseUrl: string | undefined;
+
+  if (flags.token) {
+    token = flags.token;
+  } else {
+    const method = await select({
+      message: "How do you want to authenticate?",
+      choices: [
+        { value: "browser", name: "Browser login (recommended)" },
+        { value: "token", name: "Paste token manually" },
+      ],
+    });
+
+    if (method === "browser") {
+      const org = await input({
+        message: "Organization hint (leave empty to skip):",
+      });
+      token = await browserLogin(org ? { org } : undefined);
+    } else {
+      token = await password({ message: "CDF bearer token:" });
+    }
+  }
+
+  // Try to extract project and base URL from JWT claims
+  const extracted = extractAuthFromToken(token);
+  inferredProject = extracted.project;
+  inferredBaseUrl = extracted.baseUrl;
 
   const project =
     flags.project ||
     (await input({
       message: "CDF project name:",
+      ...(inferredProject ? { default: inferredProject } : {}),
     }));
 
   const baseUrl =
     flags.baseUrl ||
     (await input({
       message: "CDF base URL:",
-      default: "https://az-eastus-1.cognitedata.com",
+      default: inferredBaseUrl || "https://az-eastus-1.cognitedata.com",
     }));
 
   return { token, project, baseUrl };

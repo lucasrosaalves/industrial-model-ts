@@ -1,4 +1,5 @@
 import { defineConfig } from "tsup";
+import pkg from "./package.json";
 
 export default defineConfig([
   // Runtime library (consumer-facing)
@@ -24,5 +25,8 @@ export default defineConfig([
     sourcemap: true,
     noExternal: ["commander", "@inquirer/prompts"],
     external: ["@cognite/sdk"],
+    define: {
+      "process.env.PACKAGE_VERSION": JSON.stringify(pkg.version),
+    },
   },
 ]);

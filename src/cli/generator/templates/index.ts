@@ -3,10 +3,10 @@
  */
 
 import type { GeneratorConfig } from "../renderer";
+import { renderHeader } from "./header";
 
 export function renderIndex(config: GeneratorConfig): string {
-  return `/* eslint-disable */
-// DO NOT EDIT — this file is auto-generated
+  return `${renderHeader(config)}
 
 export * from './models'
 export { ${config.clientFunctionName} } from './client'

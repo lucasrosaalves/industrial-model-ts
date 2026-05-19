@@ -19,6 +19,8 @@ export interface GeneratorConfig {
   clientName: string;
   clientFunctionName: string;
   outputPath: string;
+  packageVersion: string;
+  generatedAt: string;
 }
 
 export function createGeneratorConfig(options: {
@@ -27,6 +29,7 @@ export function createGeneratorConfig(options: {
   dataModelVersion: string;
   clientName: string | undefined;
   outputPath: string | undefined;
+  packageVersion: string;
 }): GeneratorConfig {
   const clientName = options.clientName || toPascal(options.dataModelId);
   return {
@@ -36,6 +39,8 @@ export function createGeneratorConfig(options: {
     clientName,
     clientFunctionName: `create${clientName}Client`,
     outputPath: options.outputPath || "./generated",
+    packageVersion: options.packageVersion,
+    generatedAt: new Date().toISOString(),
   };
 }
 
@@ -55,7 +60,7 @@ export function generateFromDefinitions(
   }
   mkdirSync(outputDir, { recursive: true });
 
-  writeFileSync(join(outputDir, "models.ts"), renderModels(viewDefinitions));
+  writeFileSync(join(outputDir, "models.ts"), renderModels(viewDefinitions, config));
   writeFileSync(join(outputDir, "client.ts"), renderClient(viewDefinitions, config));
   writeFileSync(join(outputDir, "index.ts"), renderIndex(config));
 }

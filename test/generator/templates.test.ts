@@ -144,12 +144,16 @@ const mockConfig: GeneratorConfig = {
   clientName: "MyDataModel",
   clientFunctionName: "createMyDataModelClient",
   outputPath: "./generated",
+  packageVersion: "0.2.0",
+  generatedAt: "2026-01-01T00:00:00.000Z",
 };
 
 describe("renderModels", () => {
   it("generates IndustrialModel type aliases", () => {
-    const output = renderModels(mockViews);
+    const output = renderModels(mockViews, mockConfig);
 
+    expect(output).toContain("// Data model: target_space/MyDataModel v1");
+    expect(output).toContain("// industrial-model v0.2.0");
     expect(output).toContain("import type { IndustrialModel, NodeId } from 'industrial-model'");
     expect(output).toContain("export type Equipment = IndustrialModel<{");
     expect(output).toContain("export type User = IndustrialModel<");
@@ -157,7 +161,7 @@ describe("renderModels", () => {
   });
 
   it("generates props fields correctly", () => {
-    const output = renderModels(mockViews);
+    const output = renderModels(mockViews, mockConfig);
 
     expect(output).toContain("name: string");
     expect(output).toContain("temperature?: number");
@@ -166,14 +170,14 @@ describe("renderModels", () => {
   });
 
   it("generates relations type param for views with relations", () => {
-    const output = renderModels(mockViews);
+    const output = renderModels(mockViews, mockConfig);
 
     expect(output).toContain("role?: Role");
     expect(output).toContain("users: User[]");
   });
 
   it("excludes reverse relations from props", () => {
-    const output = renderModels(mockViews);
+    const output = renderModels(mockViews, mockConfig);
 
     // Role's "users" reverse relation should NOT appear in props
     // It should only appear in relations
@@ -183,7 +187,7 @@ describe("renderModels", () => {
   });
 
   it("does not contain old patterns", () => {
-    const output = renderModels(mockViews);
+    const output = renderModels(mockViews, mockConfig);
 
     expect(output).not.toContain("interface");
     expect(output).not.toContain("WhereInput");

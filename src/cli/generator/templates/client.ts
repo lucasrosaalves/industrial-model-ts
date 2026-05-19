@@ -5,6 +5,7 @@
 import type { ViewDefinition } from "../models";
 import { getClientPropertyName } from "../models";
 import type { GeneratorConfig } from "../renderer";
+import { renderHeader } from "./header";
 
 export function renderClient(views: ViewDefinition[], config: GeneratorConfig): string {
   const imports = views.map((v) => `  ${v.viewName},`).join("\n");
@@ -16,8 +17,7 @@ export function renderClient(views: ViewDefinition[], config: GeneratorConfig): 
     ) => model.query<${view.viewName}>()({ viewExternalId: "${view.viewExternalId}", ...options }),`;
   }).join("\n");
 
-  return `/* eslint-disable */
-// DO NOT EDIT — this file is auto-generated
+  return `${renderHeader(config)}
 
 import type { CogniteClient } from '@cognite/sdk'
 import { IndustrialModelClient, type QueryOptions, type QuerySelect } from 'industrial-model'

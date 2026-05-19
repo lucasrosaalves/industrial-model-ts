@@ -4,11 +4,12 @@
 
 import type { ViewDefinition } from "../models";
 import { getInterfaceType, getPropsFields, getRelationResolvedType, getRelationTypeFields } from "../models";
+import type { GeneratorConfig } from "../renderer";
+import { renderHeader } from "./header";
 
-export function renderModels(views: ViewDefinition[]): string {
+export function renderModels(views: ViewDefinition[], config: GeneratorConfig): string {
   const lines: string[] = [
-    "/* eslint-disable */",
-    "// DO NOT EDIT — this file is auto-generated",
+    renderHeader(config),
     "",
     "import type { IndustrialModel, NodeId } from 'industrial-model'",
   ];

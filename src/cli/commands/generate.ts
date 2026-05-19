@@ -44,6 +44,7 @@ export const generateCommand = new Command("generate")
       dataModelVersion: dataModel.version,
       clientName: options.clientName,
       outputPath: options.outputPath,
+      packageVersion: process.env.PACKAGE_VERSION ?? "unknown",
     });
 
     console.log(`\nGenerating types for ${dataModel.space}/${dataModel.externalId}/${dataModel.version}...`);
