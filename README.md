@@ -1333,6 +1333,10 @@ Logical combinators `AND`, `OR`, and `NOT` are supported at any nesting level, i
 | `Cognite360Image`, `Cognite360ImageModel`, `Cognite360ImageCollection`, `Cognite360ImageStation`, `Cognite360ImageAnnotation` | 360 image views. |
 | `CogniteCubeMap` | Cube map view. |
 
+## Code Generator
+
+The package includes a CLI to generate typed models and client code from a Cognite data model. See the [CLI documentation](./src/cli/README.md).
+
 ## Releasing
 
 This project uses [Changesets](https://github.com/changesets/changesets) to manage versions and changelogs.
