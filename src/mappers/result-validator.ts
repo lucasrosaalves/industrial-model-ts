@@ -15,6 +15,7 @@ const nodeMetadataSchema = {
   instanceType: z.literal("node").optional(),
   space: z.string(),
   externalId: z.string(),
+  version: z.number(),
   createdTime: z.number().optional(),
   deletedTime: z.number().optional(),
   lastUpdatedTime: z.number().optional(),

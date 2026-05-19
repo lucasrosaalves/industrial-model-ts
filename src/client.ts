@@ -13,6 +13,7 @@ import { ViewMapper } from "./mappers/view-mapper";
 import type {
   DataModelId,
   IndustrialModelClientOptions,
+  QueryExecutor,
   QueryOptions,
   QueryResult,
   QueryResultItem,
@@ -45,10 +46,12 @@ export class IndustrialModelClient {
     this.validateResults = options.validateResults ?? false;
   }
 
-  query<TModel>() {
-    return <const TSelect extends QuerySelect<TModel> | undefined = undefined>(
+  query<TModel>(): QueryExecutor<TModel> {
+    const execute = <const TSelect extends QuerySelect<TModel> | undefined = undefined>(
       options: QueryOptions<TModel, TSelect>,
     ): Promise<QueryResult<QueryResultItem<TModel, TSelect>>> => this.queryInternal(options);
+
+    return execute as unknown as QueryExecutor<TModel>;
   }
 
   private async queryInternal<TModel, TSelect extends QuerySelect<TModel> | undefined = undefined>(

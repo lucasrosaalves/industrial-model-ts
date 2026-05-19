@@ -134,6 +134,8 @@ type WrapResultValue<TShape, TValue> = [NonNull<TShape>] extends [readonly unkno
   ? TValue[]
   : TValue;
 
+type AsQuerySelect<TModel, TSelect> = TSelect extends QuerySelect<TModel> ? TSelect : never;
+
 type SelectedValue<
   TModel,
   K extends PropertyKey,
@@ -150,8 +152,7 @@ type SelectedValue<
           ResultShapeForKey<TModel, K>,
           QueryResultItem<
             UnwrapRelationTarget<ResultEntityForKey<TModel, K>>,
-            TValue &
-              QuerySelect<UnwrapRelationTarget<ResultEntityForKey<TModel, K>>, PrevDepth[TDepth]>,
+            AsQuerySelect<UnwrapRelationTarget<ResultEntityForKey<TModel, K>>, TValue>,
             PrevDepth[TDepth]
           >
         >
@@ -198,6 +199,17 @@ export interface QueryResult<TItem = Record<string, unknown>> {
   items: TItem[];
   cursor: string | null;
 }
+
+export type QueryExecutor<TModel> = {
+  <const TSelect extends QuerySelect<TModel>>(
+    options: Omit<QueryOptions<TModel, TSelect>, "select"> & {
+      select: TSelect & QuerySelect<TModel>;
+    },
+  ): Promise<QueryResult<QueryResultItem<TModel, TSelect>>>;
+  (
+    options: Omit<QueryOptions<TModel, undefined>, "select"> & { select?: undefined },
+  ): Promise<QueryResult<QueryResultItem<TModel, undefined>>>;
+};
 
 export type StringFilters = {
   eq?: string;
