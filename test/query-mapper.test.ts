@@ -357,6 +357,60 @@ describe("QueryMapper", () => {
         }),
       ).rejects.toThrow(/sort: Unrecognized key: "namme"/);
     });
+
+    it("rejects selecting a list-direct-relation inward (timeSeries on CogniteAsset)", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          select: { timeSeries: { name: true } } as never,
+        }),
+      ).rejects.toThrow(/select\.timeSeries.*list direct relations/);
+    });
+
+    it("rejects selecting a list-direct-relation inward (files on CogniteAsset)", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          select: { files: { name: true } } as never,
+        }),
+      ).rejects.toThrow(/select\.files.*list direct relations/);
+    });
+
+    it("rejects selecting a list-direct-relation inward (activities on CogniteEquipment)", async () => {
+      await expect(
+        mapper.map<Equipment>({
+          viewExternalId: "CogniteEquipment",
+          select: { activities: { name: true } } as never,
+        }),
+      ).rejects.toThrow(/select\.activities.*list direct relations/);
+    });
+
+    it("includes the target view and through-identifier in the rejection message", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          select: { timeSeries: { name: true } } as never,
+        }),
+      ).rejects.toThrow(/CogniteTimeSeries.*assets/);
+    });
+
+    it("allows selecting single-direct-relation inward (children on CogniteAsset)", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          select: { children: { name: true } },
+        }),
+      ).resolves.not.toThrow();
+    });
+
+    it("allows selecting single-direct-relation inward (equipment on CogniteAsset)", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          select: { equipment: { name: true } } as never,
+        }),
+      ).resolves.not.toThrow();
+    });
   });
 
   describe("complex queries", () => {
@@ -440,7 +494,6 @@ describe("QueryMapper", () => {
         select: {
           name: true,
           asset: { name: true },
-          activities: { name: true },
         },
       });
 
@@ -450,24 +503,6 @@ describe("QueryMapper", () => {
           direction: "outwards",
           through: { view: viewRef("CogniteEquipment"), identifier: "asset" },
         },
-      });
-      expect(query.with["CogniteEquipment|activities"]).toMatchObject({
-        nodes: {
-          from: "CogniteEquipment",
-          direction: "inwards",
-          through: {
-            source: viewRef("CogniteActivity"),
-            identifier: "equipment",
-          },
-        },
-      });
-      expect(query.select["CogniteEquipment|activities"]).toEqual({
-        sources: [
-          {
-            source: viewRef("CogniteActivity"),
-            properties: ["name", "equipment"],
-          },
-        ],
       });
     });
 

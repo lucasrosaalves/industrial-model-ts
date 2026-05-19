@@ -6,9 +6,9 @@ import type {
 } from "../cognite";
 import { AGGREGATE_LIMIT } from "../constants";
 import type { AggregateDefinition, AggregateOptions } from "../types";
-import { AggregateValidator } from "./aggregate-validator";
+import { getSelectedGroupByKeys, toViewReference } from "../utils";
+import { AggregateValidator } from "../validators";
 import { FilterMapper } from "./filter-mapper";
-import { getSelectedGroupByKeys, toViewReference } from "./utils";
 import type { ViewMapper } from "./view-mapper";
 
 export class AggregateMapper {

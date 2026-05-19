@@ -2,32 +2,36 @@
 
 TypeScript SDK for querying [Cognite Flexible Data Models (FDM)](https://docs.cognite.com/cdf/data_modeling/) with a type-safe, graph-aware API.
 
-## Features
+`industrial-model` is designed for application code that needs to move through industrial data as a model, not as loosely typed query payloads. Start with a Cognite data model, describe the view shape in TypeScript, and query nodes, relations, filters, sorting, pagination, and aggregations with compiler support.
 
-- **Type-safe queries** — define your data model types once, get compile-time validation on filters, selects, and sorts
-- **Relation traversal** — query nested relations (edges/nodes) up to 3 levels deep with automatic pagination
-- **Text search filters** — use Cognite `instances.search` from query and aggregate filters on text fields
-- **Dual CJS/ESM** — works in Node.js and bundlers out of the box
-- **Cursor-based pagination** — built-in support for iterating large result sets
+## What You Get
+
+- **Typed model queries** - validate selected fields, filters, and sort keys at compile time.
+- **Precise result types** - returned items follow the `select` tree, including nested relation selections.
+- **Graph traversal** - expand direct, reverse, and edge relations up to 3 levels deep.
+- **Industrial filters** - combine scalar filters, list filters, full-text search, and nested relation filters.
+- **Pagination support** - use cursors manually or fetch all root pages with `limit: -1`.
+- **Aggregation support** - count, group, list distinct values, and aggregate numeric properties.
+- **Runtime validation option** - parse query results with Zod schemas derived from Cognite view metadata.
+- **CJS and ESM builds** - works in Node.js and common bundler setups.
 
 ## Installation
 
 ```bash
 npm install industrial-model
-```
-
-`@cognite/sdk` is a peer dependency and must be installed separately:
-
-```bash
 npm install @cognite/sdk
 ```
+
+`@cognite/sdk` is a peer dependency and must be installed by your application.
 
 ## Requirements
 
 - Node.js `>=20`
-- `@cognite/sdk` `^10.10.0` (peer dependency)
+- `@cognite/sdk` `^10.10.0`
 
-## Quick start
+## First Query
+
+Create a Cognite SDK client, point `IndustrialModelClient` at a data model, and query a view.
 
 ```ts
 import { CogniteClient } from "@cognite/sdk";
@@ -48,58 +52,55 @@ const model = new IndustrialModelClient(client, {
 
 const { items } = await model.query<{ name: string; description: string }>()({
   viewExternalId: "CogniteAsset",
-  select: { name: true, description: true },
-  filters: { name: { prefix: "Pump" } },
+  select: {
+    name: true,
+    description: true,
+  },
+  filters: {
+    name: { prefix: "Pump" },
+  },
+  sort: {
+    name: "ascending",
+  },
   limit: 10,
 });
+
+items[0]?.name;
 ```
 
-## Examples
+This is the basic contract:
 
-| Topic | Section |
-|-------|---------|
-| Setup & types | [Shared type definitions](#shared-type-definitions) |
-| Basic queries | [Query assets](#query-assets), [Single asset](#query-a-single-asset-by-externalid) |
-| Relations | [Parent/root](#query-assets-with-parent-and-root-relations), [Path](#query-assets-with-their-full-path), [Children](#query-child-assets-reverse-relation), [Edges](#traverse-edge-relations-360-images-on-3d-objects) |
-| Filters | [AND/OR/NOT](#combine-filters-with-and--or--not), [Text search](#search-text-fields), [Nested](#filter-on-related-nodes), [Tags](#filter-assets-by-tags), [Batch IDs](#filter-by-multiple-external-ids) |
-| Select & sort | [Select all scalars](#select-all-scalar-fields), [Multi-field sort](#sort-by-multiple-fields) |
-| Pagination | [Manual cursor loop](#paginate-through-all-assets), [Fetch all pages](#fetch-all-pages-automatically) |
-| Aggregation | [Count by group](#count-assets-by-source-id), [Distinct values](#list-distinct-source-ids), [Numeric aggregates](#average-volume-by-type), [Global count](#count-all-matching-assets) |
-| Advanced | [Custom data model](#use-a-custom-data-model), [Full query](#full-example-assets-equipment-and-filters) |
+1. `viewExternalId` selects the Cognite view.
+2. The generic type describes the fields you want TypeScript to understand.
+3. `select` controls the returned shape.
+4. `filters`, `sort`, `limit`, and `cursor` control the query behavior.
 
-All examples below use the [Cognite Core Data Model](https://docs.cognite.com/cdf/data_modeling/reference_data_models/cognite_core/), space `cdf_cdm`, version `v1`.
+## Define A Model
 
-### Shared type definitions
+For scalar-only views, a plain object type is enough:
 
 ```ts
-import type {
-  IndustrialModel,
-  ModelProps,
-  ModelRelations,
-  NodeId,
-  QueryResultItem,
-} from "industrial-model";
-
-type CogniteAssetClass = IndustrialModel<{
+type CogniteAssetClass = {
   name: string;
   code: string;
-}>;
+};
+```
+
+When a view has expandable relations, use `IndustrialModel<TProps, TRelations>`. Put the raw view properties in `TProps`, and put expandable relation result shapes in `TRelations`.
+
+```ts
+import type { IndustrialModel, ModelProps, ModelRelations, NodeId } from "industrial-model";
 
 type CogniteAsset = IndustrialModel<
   {
     name: string;
     description: string;
     tags: string[];
-    aliases: string[];
     sourceId: string;
-    sourceCreatedTime: string;
-    sourceUpdatedTime: string;
     parent?: NodeId;
     root?: NodeId;
     path: NodeId[];
     assetClass?: NodeId;
-    type?: NodeId;
-    source?: NodeId;
   },
   {
     parent?: CogniteAsset;
@@ -109,77 +110,27 @@ type CogniteAsset = IndustrialModel<
   }
 >;
 
-type CogniteActivity = IndustrialModel<{
-  name: string;
-  description: string;
-  startTime: string;
-  endTime: string;
-  scheduledStartTime: string;
-  scheduledEndTime: string;
-  assets: NodeId[];
-  equipment: NodeId[];
-  timeSeries: NodeId[];
-}>;
-
 type CogniteEquipment = IndustrialModel<
   {
     name: string;
-    description: string;
     manufacturer: string;
     serialNumber: string;
     tags: string[];
     asset?: NodeId;
-    equipmentType?: NodeId;
-    source?: NodeId;
   },
   {
     asset?: CogniteAsset;
-    activities?: CogniteActivity[];
-  }
->;
-
-type CogniteUnit = IndustrialModel<{
-  name: string;
-  symbol: string;
-  quantity: string;
-  source: string;
-}>;
-
-type CogniteTimeSeries = IndustrialModel<
-  {
-    name: string;
-    description: string;
-    isStep: boolean;
-    sourceUnit: string;
-    unit?: NodeId;
-    assets: NodeId[];
-    equipment: NodeId[];
-  },
-  {
-    unit?: CogniteUnit;
-  }
->;
-
-type Cognite360Image = IndustrialModel<{
-  takenAt: string;
-}>;
-
-type Cognite3DObject = IndustrialModel<
-  {
-    name: string;
-    description: string;
-  },
-  {
-    images360?: Cognite360Image[];
   }
 >;
 ```
 
----
+The relation metadata is type-only. It lets the SDK infer nested `select` trees and nested filters while Cognite remains the source of truth for the actual view and relation definitions.
 
-### Query assets
+All examples below use the [Cognite Core Data Model](https://docs.cognite.com/cdf/data_modeling/reference_data_models/cognite_core/), space `cdf_cdm`, version `v1`.
 
-Fetch the first 100 assets whose name starts with `"Pump"`, sorted alphabetically.
+## Query Basics
+
+Start with a single view, select the fields the application needs, then layer on filters and sorting.
 
 ```ts
 const { items, cursor } = await model.query<CogniteAsset>()({
@@ -193,19 +144,31 @@ const { items, cursor } = await model.query<CogniteAsset>()({
   filters: {
     name: { prefix: "Pump" },
   },
-  sort: { name: "ascending" },
+  sort: {
+    name: "ascending",
+  },
   limit: 100,
 });
 ```
 
----
+The returned item type follows the selection:
 
-### Query a single asset by externalId
+```ts
+items[0]?.name; // string
+items[0]?.description; // string
+items[0]?.externalId; // instance metadata is always included
+```
+
+To find one known instance, filter by `externalId`:
 
 ```ts
 const { items } = await model.query<CogniteAsset>()({
   viewExternalId: "CogniteAsset",
-  select: { name: true, description: true, tags: true },
+  select: {
+    name: true,
+    description: true,
+    tags: true,
+  },
   filters: {
     externalId: { eq: "WMT:VAL" },
   },
@@ -214,11 +177,114 @@ const { items } = await model.query<CogniteAsset>()({
 const asset = items[0];
 ```
 
----
+Use `_all` when you want every scalar property from the root view:
 
-### Query assets with parent and root relations
+```ts
+const { items } = await model.query<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  select: { _all: true },
+  limit: 50,
+});
+```
 
-Traverse up the asset hierarchy — fetch each asset alongside its direct parent and the root of the tree.
+`_all` includes scalar fields and relation IDs. Add nested selections when you want relation objects instead of `NodeId` references.
+
+## Filters And Sorting
+
+Filters are typed from your model. String, number, boolean, date, `NodeId`, and list fields each expose the operators that make sense for that field.
+
+```ts
+const { items } = await model.query<CogniteEquipment>()({
+  viewExternalId: "CogniteEquipment",
+  select: {
+    name: true,
+    manufacturer: true,
+    serialNumber: true,
+    tags: true,
+    asset: true,
+  },
+  filters: {
+    asset: { eq: { space: "my-space", externalId: "WMT:VAL" } },
+    manufacturer: { exists: true },
+  },
+  sort: {
+    name: "ascending",
+  },
+  limit: 50,
+});
+```
+
+Combine conditions with `AND`, `OR`, and `NOT`:
+
+```ts
+const { items } = await model.query<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  select: {
+    name: true,
+    tags: true,
+    sourceId: true,
+  },
+  filters: {
+    OR: [
+      { tags: { containsAny: ["critical"] } },
+      { name: { prefix: "Compressor" } },
+    ],
+    NOT: {
+      sourceId: { eq: "legacy-system" },
+    },
+  },
+  limit: 100,
+});
+```
+
+List fields support `containsAny` and `containsAll`:
+
+```ts
+const critical = await model.query<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  select: {
+    name: true,
+    tags: true,
+  },
+  filters: {
+    tags: { containsAny: ["critical", "safety"] },
+  },
+  limit: 100,
+});
+
+const fullyTagged = await model.query<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  select: {
+    name: true,
+    tags: true,
+  },
+  filters: {
+    tags: { containsAll: ["production", "verified"] },
+  },
+  limit: 100,
+});
+```
+
+Sort clauses apply to primitive fields on the root view, including node metadata such as `externalId`.
+
+```ts
+const { items } = await model.query<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  select: {
+    name: true,
+    sourceId: true,
+  },
+  sort: {
+    name: "ascending",
+    externalId: "descending",
+  },
+  limit: 100,
+});
+```
+
+## Text Search
+
+Use `search` on Cognite text properties and string-list text properties when you want full-text matching instead of exact or prefix matching. The optional `operator` is passed to Cognite search and defaults to `"OR"`.
 
 ```ts
 const { items } = await model.query<CogniteAsset>()({
@@ -226,6 +292,44 @@ const { items } = await model.query<CogniteAsset>()({
   select: {
     name: true,
     description: true,
+    tags: true,
+  },
+  filters: {
+    name: { search: { query: "root pump", operator: "AND" } },
+    tags: { search: { query: "critical" } },
+  },
+  limit: 100,
+});
+```
+
+Search filters can be combined with regular operators. The SDK first calls Cognite `instances.search`, maps the matched nodes to instance references, and then applies those references to the query or aggregate request.
+
+```ts
+const pumps = await model.query<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  select: {
+    name: true,
+    sourceId: true,
+  },
+  filters: {
+    name: {
+      prefix: "Pump",
+      search: { query: "motor" },
+    },
+    sourceId: { exists: true },
+  },
+});
+```
+
+## Relations
+
+The same `select` object that selects scalar fields can expand relations. Direct relations move outward from the current node.
+
+```ts
+const { items } = await model.query<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  select: {
+    name: true,
     parent: {
       name: true,
       description: true,
@@ -246,11 +350,7 @@ const { items } = await model.query<CogniteAsset>()({
 const firstParentName = items[0]?.parent?.name;
 ```
 
----
-
-### Query assets with their full path
-
-The `path` property is a list of `NodeId` references representing the ancestor chain. Use it to reconstruct breadcrumbs.
+List relations work the same way. For example, `path` can be expanded into asset objects for breadcrumb-style views.
 
 ```ts
 const { items } = await model.query<CogniteAsset>()({
@@ -268,306 +368,61 @@ const { items } = await model.query<CogniteAsset>()({
 });
 ```
 
----
-
-### Query equipment linked to an asset
+Nested relation filters let you filter the root view based on related nodes.
 
 ```ts
-const { items } = await model.query<CogniteEquipment>()({
-  viewExternalId: "CogniteEquipment",
+const { items } = await model.query<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
   select: {
     name: true,
-    manufacturer: true,
-    serialNumber: true,
-    tags: true,
-    asset: true,
-  },
-  filters: {
-    asset: { eq: { space: "my-space", externalId: "WMT:VAL" } },
-    manufacturer: { exists: true },
-  },
-  sort: { name: "ascending" },
-  limit: 50,
-});
-```
-
----
-
-### Query time series with their unit
-
-```ts
-const { items } = await model.query<CogniteTimeSeries>()({
-  viewExternalId: "CogniteTimeSeries",
-  select: {
-    name: true,
-    description: true,
-    isStep: true,
-    sourceUnit: true,
-    unit: {
+    parent: {
       name: true,
-      symbol: true,
-      quantity: true,
     },
   },
   filters: {
-    isStep: { eq: false },
-    sourceUnit: { exists: true },
-  },
-  limit: 200,
-});
-```
-
----
-
-### Query activities in a time window
-
-```ts
-const { items } = await model.query<CogniteActivity>()({
-  viewExternalId: "CogniteActivity",
-  select: {
-    name: true,
-    description: true,
-    startTime: true,
-    endTime: true,
-    scheduledStartTime: true,
-    scheduledEndTime: true,
-  },
-  filters: {
-    startTime: { gte: "2024-01-01T00:00:00Z", lte: "2024-12-31T23:59:59Z" },
-  },
-  sort: { startTime: "ascending" },
-  limit: 500,
-});
-```
-
----
-
-### Combine filters with AND / OR / NOT
-
-Fetch assets that are either tagged `"critical"` or have a name starting with `"Compressor"`, but exclude those from source `"legacy-system"`.
-
-```ts
-const { items } = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: { name: true, tags: true, sourceId: true },
-  filters: {
-    OR: [
-      { tags: { containsAny: ["critical"] } },
-      { name: { prefix: "Compressor" } },
-    ],
-    NOT: { sourceId: { eq: "legacy-system" } },
-  },
-  limit: 100,
-});
-```
-
----
-
-### Paginate through all assets
-
-```ts
-let cursor: string | null = null;
-const allAssets: QueryResultItem<CogniteAsset, { name: true; description: true }>[] = [];
-
-do {
-  const result = await model.query<CogniteAsset>()({
-    viewExternalId: "CogniteAsset",
-    select: { name: true, description: true },
-    limit: 1000,
-    cursor,
-  });
-
-  allAssets.push(...result.items);
-  cursor = result.cursor;
-} while (cursor !== null);
-
-console.log(`Total assets: ${allAssets.length}`);
-```
-
----
-
-### Fetch all pages automatically
-
-Pass `limit: -1` to follow root-view cursors until every page is loaded. The SDK issues multiple `instances.query` calls (1000 items per page by default). The returned `cursor` is always `null`.
-
-```ts
-const { items } = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: { name: true, description: true },
-  filters: { tags: { containsAny: ["production"] } },
-  limit: -1,
-});
-
-console.log(`Loaded ${items.length} assets across all pages`);
-```
-
----
-
-### Select all scalar fields
-
-Use `_all` to include every scalar property on the view without listing them individually. Relation fields are returned as `NodeId` references but are not expanded — add nested `select` blocks when you need related data.
-
-```ts
-const { items } = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: { _all: true },
-  limit: 50,
-});
-
-// items[0] includes name, description, tags, parent (as NodeId), etc.
-```
-
-Combine `_all` with explicit relation expansion:
-
-```ts
-const { items } = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: {
-    _all: true,
-    parent: { name: true },
-  },
-  limit: 25,
-});
-```
-
----
-
-### Filter by multiple external IDs
-
-```ts
-const { items } = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: { name: true, description: true },
-  filters: {
-    externalId: {
-      in: ["WMT:VAL", "WMT:PUMP-01", "WMT:PUMP-02"],
+    parent: {
+      name: { eq: "Site Root" },
     },
-  },
-});
-```
-
----
-
-### Filter assets by tags
-
-```ts
-// Match assets that have at least one of these tags
-const critical = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: { name: true, tags: true },
-  filters: { tags: { containsAny: ["critical", "safety"] } },
-  limit: 100,
-});
-
-// Match assets that must have every tag
-const fullyTagged = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: { name: true, tags: true },
-  filters: { tags: { containsAll: ["production", "verified"] } },
-  limit: 100,
-});
-```
-
----
-
-### Search text fields
-
-Use `search` on text properties and string-list text properties when you want Cognite full-text matching instead of exact or prefix filters. The optional `operator` is passed to Cognite search and defaults to `"OR"`; use `"AND"` when every term should match.
-
-```ts
-const { items } = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: { name: true, description: true, tags: true },
-  filters: {
-    name: { search: { query: "root pump", operator: "AND" } },
-    tags: { search: { query: "critical" } },
-  },
-  limit: 100,
-});
-```
-
-Search filters can be combined with normal field operators. The SDK first calls Cognite `instances.search`, then adds the returned node references to the regular query filter.
-
-```ts
-const pumps = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: { name: true, sourceId: true },
-  filters: {
-    name: {
-      prefix: "Pump",
-      search: { query: "motor" },
-    },
-    sourceId: { exists: true },
-  },
-});
-```
-
-The same filter syntax is also supported by `aggregate`:
-
-```ts
-const { items } = await model.aggregate<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  aggregate: { count: {} },
-  filters: {
-    name: { search: { query: "compressor seal" } },
-  },
-});
-```
-
----
-
-### Filter on related nodes
-
-Filter the root view based on properties of a direct or nested relation. This uses Cognite nested filters under the hood.
-
-```ts
-// Assets whose parent is named "Site Root"
-const { items } = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: { name: true, parent: { name: true } },
-  filters: {
-    parent: { name: { eq: "Site Root" } },
   },
   limit: 50,
 });
+```
 
-// Assets whose parent's asset class code is "PUMP"
+You can keep moving through the graph:
+
+```ts
 const pumpsByClass = await model.query<CogniteAsset>()({
   viewExternalId: "CogniteAsset",
   select: {
     name: true,
-    parent: { assetClass: { name: true, code: true } },
+    parent: {
+      assetClass: {
+        name: true,
+        code: true,
+      },
+    },
   },
   filters: {
-    parent: { assetClass: { code: { eq: "PUMP" } } },
+    parent: {
+      assetClass: {
+        code: { eq: "PUMP" },
+      },
+    },
   },
   limit: 50,
 });
-
-// Combine root and nested conditions
-const filtered = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: { name: true, parent: { name: true } },
-  filters: {
-    AND: [
-      { name: { prefix: "Pump" } },
-      { parent: { name: { exists: true } } },
-    ],
-  },
-  limit: 100,
-});
 ```
 
----
+### Reverse Relations
 
-### Query child assets (reverse relation)
-
-Declare reverse relations in the `IndustrialModel<TProps, TRelations>` metadata. The library resolves the correct traversal direction from your data model.
+Declare reverse relations in `IndustrialModel<TProps, TRelations>`. The SDK resolves the traversal direction from the Cognite data model.
 
 ```ts
 type AssetWithChildren = IndustrialModel<
   ModelProps<CogniteAsset>,
-  ModelRelations<CogniteAsset> & { children?: CogniteAsset[] }
+  ModelRelations<CogniteAsset> & {
+    children?: CogniteAsset[];
+  }
 >;
 
 const { items } = await model.query<AssetWithChildren>()({
@@ -585,18 +440,32 @@ const { items } = await model.query<AssetWithChildren>()({
 });
 ```
 
----
+### Edge Relations
 
-### Traverse edge relations (360 images on 3D objects)
-
-Some relations are modeled as edges rather than direct node links. Select them the same way — the SDK builds the edge hop automatically.
+Some relations are modeled as edges rather than direct node references. Select them with the same relation syntax.
 
 ```ts
+type Cognite360Image = IndustrialModel<{
+  takenAt: string;
+}>;
+
+type Cognite3DObject = IndustrialModel<
+  {
+    name: string;
+    description: string;
+  },
+  {
+    images360?: Cognite360Image[];
+  }
+>;
+
 const { items } = await model.query<Cognite3DObject>()({
   viewExternalId: "Cognite3DObject",
   select: {
     name: true,
-    images360: { takenAt: true },
+    images360: {
+      takenAt: true,
+    },
   },
   filters: {
     name: { prefix: "Tank" },
@@ -605,29 +474,258 @@ const { items } = await model.query<Cognite3DObject>()({
 });
 ```
 
----
+## Pagination
 
-### Sort by multiple fields
+`query()` returns a root cursor when more root-view items are available.
 
-Sort clauses apply to primitive fields on the root view, including node-level properties like `externalId`.
+```ts
+import type { QueryResultItem } from "industrial-model";
+
+let cursor: string | null = null;
+const allAssets: QueryResultItem<CogniteAsset, { name: true; description: true }>[] = [];
+
+do {
+  const result = await model.query<CogniteAsset>()({
+    viewExternalId: "CogniteAsset",
+    select: {
+      name: true,
+      description: true,
+    },
+    limit: 1000,
+    cursor,
+  });
+
+  allAssets.push(...result.items);
+  cursor = result.cursor;
+} while (cursor !== null);
+```
+
+Pass `limit: -1` when you want the SDK to follow all root cursors automatically. The SDK issues multiple `instances.query` calls, using 1000 root items per page by default, and returns `cursor: null`.
 
 ```ts
 const { items } = await model.query<CogniteAsset>()({
   viewExternalId: "CogniteAsset",
-  select: { name: true, sourceId: true },
-  sort: {
-    name: "ascending",
-    externalId: "descending",
+  select: {
+    name: true,
+    description: true,
   },
-  limit: 100,
+  filters: {
+    tags: { containsAny: ["production"] },
+  },
+  limit: -1,
 });
 ```
 
----
+Expanded relations use internal pagination as well. When a nested relation query reaches the internal page size, the client follows dependency cursors for up to 3 additional rounds.
 
-### Use a custom data model
+## Aggregation
 
-Point the client at any FDM in your project — not only Cognite Core. Scalar fields work with a plain object type; use `IndustrialModel<TProps, TRelations>` when you need relation selects, filters, or inference.
+Use `aggregate()` when you need grouped counts, distinct values, or numeric summaries without loading every instance.
+
+Group and count assets by `sourceId`:
+
+```ts
+const { items } = await model.aggregate<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  groupBy: {
+    sourceId: true,
+  },
+  aggregate: {
+    count: {},
+  },
+  filters: {
+    name: { prefix: "WMT" },
+  },
+});
+
+for (const row of items) {
+  console.log(row.group?.sourceId, row.aggregate?.value);
+}
+```
+
+Omit `aggregate` to list distinct values for grouped fields:
+
+```ts
+const { items } = await model.aggregate<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  groupBy: {
+    sourceId: true,
+  },
+});
+
+const sourceIds = items.map((row) => row.group?.sourceId);
+```
+
+Use `avg`, `min`, `max`, or `sum` on numeric properties:
+
+```ts
+type PointCloudVolume = IndustrialModel<{
+  volume: number;
+  volumeType: string;
+  object3D?: NodeId;
+}>;
+
+const { items } = await model.aggregate<PointCloudVolume>()({
+  viewExternalId: "CognitePointCloudVolume",
+  groupBy: {
+    volumeType: true,
+  },
+  aggregate: {
+    avg: "volume",
+  },
+});
+
+items[0]?.group?.volumeType;
+items[0]?.aggregate?.property; // "volume"
+items[0]?.aggregate?.value;
+```
+
+Count all rows matching a filter:
+
+```ts
+const { items } = await model.aggregate<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  aggregate: {
+    count: {},
+  },
+  filters: {
+    OR: [{ tags: { containsAny: ["critical"] } }, { sourceId: { eq: "sap" } }],
+  },
+});
+
+items[0]?.aggregate?.value;
+```
+
+Group by a direct relation when you need relation IDs in the result:
+
+```ts
+const { items } = await model.aggregate<PointCloudVolume>()({
+  viewExternalId: "CognitePointCloudVolume",
+  groupBy: {
+    object3D: true,
+  },
+  aggregate: {
+    sum: "volume",
+  },
+});
+
+items[0]?.group?.object3D?.externalId;
+```
+
+Text search filters are also supported in aggregations:
+
+```ts
+const { items } = await model.aggregate<CogniteAsset>()({
+  viewExternalId: "CogniteAsset",
+  aggregate: {
+    count: {},
+  },
+  filters: {
+    name: { search: { query: "compressor seal" } },
+  },
+});
+```
+
+## Runtime Validation
+
+By default, the SDK validates query inputs against the loaded Cognite view metadata before building the request. Query results are mapped without parsing each returned item.
+
+Enable `validateResults` when you also want result parsing through Zod schemas derived from Cognite view metadata:
+
+```ts
+const model = new IndustrialModelClient(
+  client,
+  {
+    space: "cdf_cdm",
+    externalId: "CogniteCore",
+    version: "v1",
+  },
+  {
+    validateResults: true,
+  },
+);
+```
+
+When result validation is enabled, Cognite `date` and `timestamp` view properties are converted to JavaScript `Date` objects. Without it, result values are returned as Cognite provides them, usually ISO strings for timestamps.
+
+## Cognite Core Client
+
+For applications working with the Cognite Core Data Model (`cdf_cdm/CogniteCore/v1`), use `CogniteCoreClient` instead of `IndustrialModelClient`. It pre-configures the data model, bundles all view type definitions, and moves the view name to the first positional argument so TypeScript can infer the model type without a generic annotation.
+
+```ts
+import { CogniteClient } from "@cognite/sdk";
+import { CogniteCoreClient } from "industrial-model";
+
+const client = new CogniteClient({ ... });
+const core = new CogniteCoreClient(client);
+```
+
+Query any Cognite Core view by passing its name to `query()`:
+
+```ts
+const { items } = await core.query("CogniteAsset")({
+  select: {
+    name: true,
+    description: true,
+    parent: { name: true },
+  },
+  filters: {
+    name: { prefix: "Pump" },
+  },
+  limit: 50,
+});
+
+items[0]?.name; // string | undefined
+items[0]?.parent?.name; // string | undefined
+```
+
+The view name drives TypeScript inference — no generic annotation is needed. All filters, `select` fields, and nested relation selections are type-checked against the bundled view definition. Every feature available on `IndustrialModelClient` — text search, pagination, `limit: -1`, nested filters, and relation traversal — works identically.
+
+Aggregations use the same positional-view-name pattern:
+
+```ts
+const { items } = await core.aggregate("CogniteEquipment")({
+  groupBy: { manufacturer: true },
+  aggregate: { count: {} },
+  filters: {
+    equipmentType: { exists: true },
+  },
+});
+
+items[0]?.group?.manufacturer;
+items[0]?.aggregate?.value;
+```
+
+All Cognite Core view types are exported from `industrial-model` and can be imported directly for use with `IndustrialModelClient` if needed:
+
+```ts
+import type { CogniteAsset, CogniteEquipment, CogniteTimeSeries } from "industrial-model";
+```
+
+### Inward List-Relation Limitation
+
+Cognite rejects server-side inward traversal of list direct relations. As a result, `timeSeries`, `files`, and `activities` cannot be expanded from `CogniteAsset`. Attempting to select them throws a descriptive error before the Cognite API is called, naming the view to query and the field to filter on.
+
+The alternative is to query the target view directly and filter by the relation field pointing back to the asset:
+
+```ts
+// not supported — throws before calling Cognite
+await core.query("CogniteAsset")({
+  select: { timeSeries: { name: true } } as never,
+});
+
+// correct alternative: query CogniteTimeSeries and filter by assets
+const { items } = await core.query("CogniteTimeSeries")({
+  select: { name: true, type: true },
+  filters: {
+    assets: { containsAny: [{ space: "my-space", externalId: "WMT:VAL" }] },
+  },
+});
+```
+
+## Custom Data Models
+
+The client can query any FDM in your CDF project. Cognite Core is not required.
 
 ```ts
 const model = new IndustrialModelClient(client, {
@@ -644,22 +742,28 @@ type PlantArea = IndustrialModel<{
 
 const { items } = await model.query<PlantArea>()({
   viewExternalId: "PlantArea",
-  select: { name: true, code: true, site: true },
-  filters: { code: { prefix: "AREA-" } },
+  select: {
+    name: true,
+    code: true,
+    site: true,
+  },
+  filters: {
+    code: { prefix: "AREA-" },
+  },
   limit: 200,
 });
 ```
 
----
+## Complete Example
 
-### Full example: assets, equipment, and filters
-
-A single query combining nested selects, nested filters, sorting, and pagination.
+This example combines typed relations, nested selections, nested filters, sorting, and cursor pagination.
 
 ```ts
 type AssetWithRelations = IndustrialModel<
   ModelProps<CogniteAsset>,
-  ModelRelations<CogniteAsset> & { children?: CogniteAsset[] }
+  ModelRelations<CogniteAsset> & {
+    children?: CogniteAsset[];
+  }
 >;
 
 const { items, cursor } = await model.query<AssetWithRelations>()({
@@ -670,23 +774,32 @@ const { items, cursor } = await model.query<AssetWithRelations>()({
     tags: true,
     parent: {
       name: true,
-      assetClass: { name: true, code: true },
+      assetClass: {
+        name: true,
+        code: true,
+      },
+    },
+    children: {
+      name: true,
     },
   },
   filters: {
     name: { prefix: "WMT" },
-    parent: { name: { exists: true } },
+    parent: {
+      name: { exists: true },
+    },
     OR: [
       { tags: { containsAny: ["critical"] } },
       { sourceId: { eq: "sap" } },
     ],
   },
-  sort: { name: "ascending" },
+  sort: {
+    name: "ascending",
+  },
   limit: 25,
   cursor: null,
 });
 
-// Follow-up page
 if (cursor) {
   const next = await model.query<AssetWithRelations>()({
     viewExternalId: "CogniteAsset",
@@ -694,289 +807,160 @@ if (cursor) {
       name: true,
       description: true,
       tags: true,
-      parent: { name: true, assetClass: { name: true, code: true } },
+      parent: {
+        name: true,
+        assetClass: {
+          name: true,
+          code: true,
+        },
+      },
     },
     filters: {
       name: { prefix: "WMT" },
-      parent: { name: { exists: true } },
+      parent: {
+        name: { exists: true },
+      },
     },
-    sort: { name: "ascending" },
+    sort: {
+      name: "ascending",
+    },
     limit: 25,
     cursor,
   });
 }
 ```
 
----
+## API Reference
 
-### Count assets by source ID
+### `new CogniteCoreClient(client, options?)`
 
-Group assets and count how many share each `sourceId`. Uses the same `filters` syntax as `query`.
+| Parameter | Type | Description |
+| --- | --- | --- |
+| `client` | `CogniteClient` | Authenticated Cognite SDK client. |
+| `options` | `IndustrialModelClientOptions` | Optional. Same options as `IndustrialModelClient`. |
 
-```ts
-const { items } = await model.aggregate<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  groupBy: { sourceId: true },
-  aggregate: { count: {} },
-  filters: { name: { prefix: "WMT" } },
-});
+Pre-configured for the Cognite Core Data Model (`cdf_cdm/CogniteCore/v1`). The exported constant `COGNITE_CORE_DATA_MODEL` holds the data model identifier if you need to pass it to other utilities.
 
-for (const row of items) {
-  console.log(row.group?.sourceId, row.aggregate?.value);
-}
-```
+### `core.query(viewExternalId)(options)`
 
----
+Same as `model.query<TModel>()(options)` on `IndustrialModelClient`, except the view is provided as the first positional argument and the model type is inferred from it. The `viewExternalId` option is not accepted in the second call. `viewExternalId` must be a valid `CogniteCoreViewExternalId`.
 
-### List distinct source IDs
+### `core.aggregate(viewExternalId)(options)`
 
-Omit `aggregate` to return unique combinations of the `groupBy` fields (up to 1000 groups).
-
-```ts
-const { items } = await model.aggregate<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  groupBy: { sourceId: true },
-});
-
-const sourceIds = items.map((row) => row.group?.sourceId);
-```
-
----
-
-### Average volume by type
-
-Use `avg`, `min`, `max`, or `sum` on numeric view properties. Only one aggregate operation per call.
-
-```ts
-type PointCloudVolume = IndustrialModel<{
-  volume: number;
-  volumeType: string;
-}>;
-
-const { items } = await model.aggregate<PointCloudVolume>()({
-  viewExternalId: "CognitePointCloudVolume",
-  groupBy: { volumeType: true },
-  aggregate: { avg: "volume" },
-});
-
-items[0]?.group?.volumeType;
-items[0]?.aggregate?.property; // "volume"
-items[0]?.aggregate?.value;
-```
-
-Other numeric aggregates:
-
-```ts
-await model.aggregate<PointCloudVolume>()({
-  viewExternalId: "CognitePointCloudVolume",
-  aggregate: { min: "volume" },
-});
-
-await model.aggregate<PointCloudVolume>()({
-  viewExternalId: "CognitePointCloudVolume",
-  aggregate: { max: "volume" },
-});
-
-await model.aggregate<PointCloudVolume>()({
-  viewExternalId: "CognitePointCloudVolume",
-  aggregate: { sum: "volume" },
-});
-```
-
----
-
-### Count non-null values for a property
-
-```ts
-const { items } = await model.aggregate<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  aggregate: { count: "name" },
-});
-
-items[0]?.aggregate?.property; // "name"
-items[0]?.aggregate?.value;
-```
-
----
-
-### Count all matching assets
-
-A global count with no `groupBy`:
-
-```ts
-const { items } = await model.aggregate<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  aggregate: { count: {} },
-  filters: {
-    OR: [{ tags: { containsAny: ["critical"] } }, { sourceId: { eq: "sap" } }],
-  },
-});
-
-items[0]?.aggregate?.value;
-```
-
----
-
-### Group by a direct relation
-
-`groupBy` supports direct relations; results are returned as `NodeId` objects.
-
-```ts
-type PointCloudVolume = IndustrialModel<{
-  volume: number;
-  object3D?: NodeId;
-}>;
-
-const { items } = await model.aggregate<PointCloudVolume>()({
-  viewExternalId: "CognitePointCloudVolume",
-  groupBy: { object3D: true },
-  aggregate: { sum: "volume" },
-});
-
-items[0]?.group?.object3D?.externalId;
-```
-
----
-
-## API
-
-### Exports
-
-| Symbol | Description |
-|--------|-------------|
-| `IndustrialModelClient` | Main client |
-| `IndustrialModel`, `ModelProps`, `ModelRelations` | Type helpers for models and relations |
-| `NodeId`, `DataModelId` | Instance and data-model identifiers |
-| `QueryOptions`, `QuerySelect`, `WhereInput`, `SortInput` | Query input types |
-| `QueryResult`, `QueryResultItem`, `QueryResultMetadata` | Query output types |
-| `AggregateOptions`, `AggregateGroupBy`, `AggregateDefinition` | Aggregate input types |
-| `AggregateResult`, `AggregateResultItem`, `GroupByKey` | Aggregate output types |
-| `buildViewSchema`, `nodeIdSchema` | Zod schemas built from Cognite view metadata |
-| `SortDirection` | `"ascending"` \| `"descending"` |
+Same as `model.aggregate<TModel>()(options)` on `IndustrialModelClient`, with the view name as the first positional argument.
 
 ### `new IndustrialModelClient(client, dataModelId, options?)`
 
 | Parameter | Type | Description |
-|-----------|------|-------------|
-| `client` | `CogniteClient` | Authenticated Cognite SDK client |
-| `dataModelId` | `DataModelId` | Space, externalId, and version of the data model |
-| `options.validateResults` | `boolean` | Optional. Validate and parse query results with Zod schemas derived from Cognite view metadata |
+| --- | --- | --- |
+| `client` | `CogniteClient` | Authenticated Cognite SDK client. |
+| `dataModelId` | `DataModelId` | Data model `space`, `externalId`, and `version`. |
+| `options.validateResults` | `boolean` | Optional. Parse result items with generated Zod schemas. |
 
-On the first query, view definitions are loaded from CDF and cached for the lifetime of the client instance.
-
-Query inputs are validated against the loaded view metadata before the Cognite request is built. Result validation is opt-in because it parses every returned item:
-
-```ts
-const model = new IndustrialModelClient(client, dataModelId, {
-  validateResults: true,
-});
-```
-
-When `validateResults` is enabled, Cognite `date` and `timestamp` view properties are converted to JavaScript `Date` objects. Without this option, result values are returned as Cognite provides them, usually ISO strings for timestamps.
+On the first query or aggregation, view definitions are loaded from CDF and cached for the lifetime of the client instance.
 
 ### `model.query<TModel>()(options)`
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `viewExternalId` | `string` | The view to query |
-| `select` | `QuerySelect<TModel>` | Optional. Defaults to `{ _all: true }` (all scalar fields). Use `_all: true` explicitly or list fields; use nested objects for relations |
-| `filters` | `WhereInput<TModel>` | Filter conditions (supports nested relation filters) |
-| `sort` | `SortInput<TModel>` | Sort by primitive fields on the **root** view only |
-| `limit` | `number` | Root page size (default `1000`). Use `-1` to fetch all root pages automatically |
-| `cursor` | `string \| null` | Pagination cursor from a previous response |
+`query()` uses a curried form so you can provide the model type first and still get return-type inference from `select`.
 
-`query()` uses a curried form so you can supply the model types first and still get return-type inference from `select`.
+| Option | Description |
+| --- | --- |
+| `viewExternalId` | View to query. |
+| `select` | Optional. Defaults to `{ _all: true }`. Use nested objects for relations. |
+| `filters` | Field, logical, search, and nested relation filters. |
+| `sort` | Sort by primitive fields on the root view only. |
+| `limit` | Root page size. Defaults to `1000`. Use `-1` to fetch all root pages. |
+| `cursor` | Root pagination cursor from a previous response. |
 
-Use `IndustrialModel<TProps, TRelations>` when the model has expandable direct, reverse, or edge relations.
-
-Returns `Promise<QueryResult<QueryResultItem<TModel, TSelect>>>`:
+Returns:
 
 ```ts
 type QueryResult<TItem> = {
   items: TItem[];
-  cursor: string | null; // null when no more root pages
+  cursor: string | null;
 };
 ```
 
-Each item always includes instance metadata (`space`, `externalId`, `createdTime`, `deletedTime`, `lastUpdatedTime`, `instanceType`) plus the fields you selected. With `{ _all: true }`, scalar view properties are included as well.
-
-Example:
-
-```ts
-const { items } = await model.query<CogniteAsset>()({
-  viewExternalId: "CogniteAsset",
-  select: {
-    parent: {
-      name: true,
-    },
-  },
-});
-
-items[0]?.parent?.name;
-items[0]?.externalId;
-```
+Each item includes instance metadata such as `space`, `externalId`, `version`, `createdTime`, `deletedTime`, and `lastUpdatedTime`, plus the selected fields.
 
 ### `model.aggregate<TModel>()(options)`
 
-| Option | Type | Description |
-|--------|------|-------------|
-| `viewExternalId` | `string` | The view to aggregate |
-| `groupBy` | `AggregateGroupBy<TModel>` | Optional. Object of groupable properties set to `true` (max 5) |
-| `filters` | `WhereInput<TModel>` | Same filter syntax as `query` |
-| `aggregate` | `AggregateDefinition<TModel>` | Optional. One of `avg`, `min`, `max`, `sum`, or `count` per call |
+| Option | Description |
+| --- | --- |
+| `viewExternalId` | View to aggregate. |
+| `groupBy` | Groupable properties set to `true`; max 5 fields. |
+| `filters` | Same filter syntax as `query()`. |
+| `aggregate` | One of `avg`, `min`, `max`, `sum`, or `count`. |
 
-Provide at least one of `groupBy` or `aggregate`. Omit `aggregate` to fetch distinct values for the grouped fields. The client always requests nodes with `limit: 1000`.
-
-`aggregate()` uses the same curried form as `query`. Each result item has the shape:
-
-```ts
-type AggregateResultItem = {
-  group?: { /* keys from groupBy */ };
-  aggregate?: { property?: string; value: number };
-};
-```
-
-When counting all rows, `aggregate` has only `value` (no `property`). When aggregating a field, `property` matches the name you passed in the request.
+Provide at least one of `groupBy` or `aggregate`. Omit `aggregate` to fetch distinct grouped values. The client requests up to 1000 aggregate rows.
 
 | Aggregate | Input | Use case |
-|-----------|-------|----------|
-| `count` | `{ count: {} }` | Row count (optionally filtered) |
-| `count` | `{ count: "name" }` | Count non-null values for a property |
-| `avg` | `{ avg: "volume" }` | Average of a numeric property |
-| `min` | `{ min: "volume" }` | Minimum numeric value |
-| `max` | `{ max: "volume" }` | Maximum numeric value |
-| `sum` | `{ sum: "volume" }` | Sum of a numeric property |
+| --- | --- | --- |
+| `count` | `{ count: {} }` | Row count, optionally filtered. |
+| `count` | `{ count: "name" }` | Count non-null values for a property. |
+| `avg` | `{ avg: "volume" }` | Average of a numeric property. |
+| `min` | `{ min: "volume" }` | Minimum numeric value. |
+| `max` | `{ max: "volume" }` | Maximum numeric value. |
+| `sum` | `{ sum: "volume" }` | Sum of a numeric property. |
 
-See [Count assets by source ID](#count-assets-by-source-id), [List distinct source IDs](#list-distinct-source-ids), and [Average volume by type](#average-volume-by-type) for full examples.
+### Filter Operators
 
-### Automatic query behavior
-
-- **`hasData` filter** — every root query includes a `hasData` constraint for the target view.
-- **Nested relation limits** — expanded relations use an internal page size of `10000` per sub-query.
-- **Dependency pagination** — when a nested sub-query returns `10000` items and a cursor, the client issues follow-up queries (up to 3 rounds) to load additional related data.
-
-### Filter operators
-
-| Type | Operators |
-|------|-----------|
+| Field type | Operators |
+| --- | --- |
 | `string` | `eq`, `in`, `prefix`, `search`, `exists` |
 | `number` | `eq`, `in`, `gt`, `gte`, `lt`, `lte`, `exists` |
 | `boolean` | `eq`, `exists` |
-| timestamp / `Date` | `eq`, `in`, `gt`, `gte`, `lt`, `lte`, `exists` — use ISO strings or `Date` values (coerced to ISO) |
+| timestamp / `Date` | `eq`, `in`, `gt`, `gte`, `lt`, `lte`, `exists` |
 | `NodeId` | `eq`, `in`, `exists` |
 | `string[]` | `containsAny`, `containsAll`, `search`, `exists` |
 | `T[]` | `containsAny`, `containsAll`, `exists` |
 
-Logical combinators `AND`, `OR`, and `NOT` are supported at any nesting level, including inside nested relation filters (e.g. `parent: { OR: [...] }`).
+Logical combinators `AND`, `OR`, and `NOT` are supported at any nesting level, including nested relation filters.
 
-`search` is available for Cognite text properties and string-list text properties. It is not accepted on node metadata fields such as `externalId` or `space`. Each `search` filter uses `instances.search` with `limit: 1000`, maps the matched nodes to `instanceReferences`, and applies those references to the query or aggregate request.
+### Relation Traversal
 
-### Relation traversal
+| Relation type | Description |
+| --- | --- |
+| Direct relations | Outward node references such as `parent`, `asset`, and `unit`. |
+| Reverse relations | Relations declared only in `TRelations`, such as `children` on `CogniteAsset`. |
+| Edge relations | Edge-backed relations declared in `TRelations`, such as `images360` on `Cognite3DObject`. |
+| Depth | Nested `select` and `filters` are supported up to 3 levels deep. |
 
-- **Direct relations** — `parent`, `asset`, `unit` (outwards from the current node). List relations such as `path` return arrays when expanded.
-- **Reverse relations** — declare in `TRelations` (e.g. `children` on `CogniteAsset`)
-- **Edge relations** — declare in `TRelations` (e.g. `images360` on `Cognite3DObject`)
-- **Depth** — nested `select` and `filters` up to 3 levels; dependency pages for large nested result sets are fetched automatically (see above)
+### Exports
+
+**Core**
+
+| Symbol | Description |
+| --- | --- |
+| `IndustrialModelClient` | Main client for any FDM data model. |
+| `IndustrialModel`, `ModelProps`, `ModelRelations` | Type helpers for model properties and relation metadata. |
+| `NodeId`, `DataModelId` | Instance and data model identifiers. |
+| `QuerySelect` | Type helper for reusable query selections. |
+| `QueryResult`, `QueryResultItem` | Query output types. |
+| `AggregateResult`, `AggregateResultItem` | Aggregate output types. |
+| `IndustrialModelClientOptions` | Client configuration options. |
+
+**Cognite Core**
+
+| Symbol | Description |
+| --- | --- |
+| `CogniteCoreClient` | Convenience client pre-configured for `cdf_cdm/CogniteCore/v1`. |
+| `COGNITE_CORE_DATA_MODEL` | Data model identifier constant for Cognite Core v1. |
+| `CogniteCoreViewExternalId` | Union type of all Cognite Core view names. |
+| `CogniteAsset`, `CogniteAssetClass`, `CogniteAssetType` | Asset hierarchy views. |
+| `CogniteEquipment`, `CogniteEquipmentType` | Equipment views. |
+| `CogniteFile`, `CogniteFileCategory` | File views. |
+| `CogniteActivity` | Activity view. |
+| `CogniteTimeSeries` | Time series view. |
+| `CogniteUnit` | Unit of measurement view. |
+| `CogniteAnnotation`, `CogniteDiagramAnnotation` | Annotation views. |
+| `CogniteSourceSystem` | Source system view. |
+| `CogniteDescribable`, `CogniteSourceable`, `CogniteSchedulable`, `CogniteVisualizable` | Mixin views. |
+| `Cognite3DObject`, `Cognite3DModel`, `Cognite3DRevision`, `Cognite3DTransformation` | 3D object and model views. |
+| `CogniteCADModel`, `CogniteCADRevision`, `CogniteCADNode` | CAD-specific views. |
+| `CognitePointCloudModel`, `CognitePointCloudRevision`, `CognitePointCloudVolume` | Point cloud views. |
+| `Cognite360Image`, `Cognite360ImageModel`, `Cognite360ImageCollection`, `Cognite360ImageStation`, `Cognite360ImageAnnotation` | 360 image views. |
+| `CogniteCubeMap` | Cube map view. |
 
 ## Releasing
 

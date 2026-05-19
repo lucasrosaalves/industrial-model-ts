@@ -11,9 +11,6 @@ import type {
 } from "../cognite";
 import { DEFAULT_LIMIT, EDGE_MARKER, MAX_LIMIT, NESTED_SEP } from "../constants";
 import type { QueryOptions, QuerySelect } from "../types";
-import { FilterMapper } from "./filter-mapper";
-import { QueryValidator } from "./query-validator";
-import { SortMapper } from "./sort-mapper";
 import {
   buildSelect,
   getDirectRelationSource,
@@ -21,7 +18,10 @@ import {
   isReverseDirectRelation,
   isViewPropertyDefinition,
   toViewReference,
-} from "./utils";
+} from "../utils";
+import { QueryValidator } from "../validators";
+import { FilterMapper } from "./filter-mapper";
+import { SortMapper } from "./sort-mapper";
 import type { ViewMapper } from "./view-mapper";
 
 export class QueryMapper {

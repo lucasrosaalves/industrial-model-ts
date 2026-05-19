@@ -12,7 +12,7 @@ import {
   isListDirectRelation,
   isReverseDirectRelation,
   isViewPropertyDefinition,
-} from "./utils";
+} from "../utils";
 import type { ViewMapper } from "./view-mapper";
 
 type ConnectionType = "DirectRelation" | "ReverseDirectRelation" | "Edge";

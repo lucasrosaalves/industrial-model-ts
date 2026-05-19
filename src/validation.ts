@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { ViewDefinition, ViewPropertyDefinition } from "./cognite";
-import { isViewPropertyDefinition } from "./mappers/utils";
+import { isViewPropertyDefinition } from "./utils";
 
 export interface BuildViewSchemaOptions {
   dateMode?: "preserve" | "coerce";

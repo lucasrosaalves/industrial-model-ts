@@ -36,6 +36,16 @@
         "types": "./dist/index.d.cts",
         "default": "./dist/index.cjs"
       }
+    },
+    "./cognite-core": {
+      "import": {
+        "types": "./dist/cognite-core/index.d.ts",
+        "default": "./dist/cognite-core/index.js"
+      },
+      "require": {
+        "types": "./dist/cognite-core/index.d.cts",
+        "default": "./dist/cognite-core/index.cjs"
+      }
     }
   },
   "main": "./dist/index.cjs",

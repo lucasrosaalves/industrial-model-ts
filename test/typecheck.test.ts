@@ -1,10 +1,9 @@
 import { describe, expectTypeOf, it } from "vitest";
-import type { z } from "zod";
+import type { CogniteCoreClient, CogniteCoreModel } from "../src/cognite-core/index.js";
 import type {
   IndustrialModel,
   IndustrialModelClient,
   NodeId,
-  nodeIdSchema,
   QueryResult,
   QueryResultItem,
   QuerySelect,
@@ -83,6 +82,46 @@ describe("public type contracts", () => {
       expectTypeOf<Awaited<typeof result>["items"][number]["children"]>().toEqualTypeOf<
         QueryResultItem<Asset, { readonly name: true; readonly score: true }>[] | undefined
       >();
+    });
+  });
+
+  it("provides generated Cognite Core entity relations", () => {
+    typecheckOnly(() => {
+      const core = null as unknown as CogniteCoreClient;
+      const query = core.query("CogniteAsset");
+      const select = {
+        name: true,
+        tags: true,
+        parent: { name: true },
+        children: { name: true },
+        equipment: {
+          name: true,
+          equipmentType: { code: true },
+        },
+      } as const;
+
+      const result = query({
+        select,
+        filters: {
+          tags: { search: { query: "critical" } },
+          parent: { name: { eq: "Root Asset" } },
+          equipment: { equipmentType: { code: { eq: "pump" } } },
+        },
+      });
+
+      type Item = Awaited<typeof result>["items"][number];
+
+      expectTypeOf<Item["name"]>().toEqualTypeOf<string | undefined>();
+      expectTypeOf<Item["tags"]>().toEqualTypeOf<string[] | undefined>();
+      expectTypeOf<Item["parent"]>().toEqualTypeOf<
+        QueryResultItem<CogniteCoreModel<"CogniteAsset">, { readonly name: true }> | undefined
+      >();
+      expectTypeOf<Item["children"]>().toEqualTypeOf<
+        QueryResultItem<CogniteCoreModel<"CogniteAsset">, { readonly name: true }>[] | undefined
+      >();
+
+      // @ts-expect-error view names are constrained to Cognite Core views.
+      core.query("CogniteMissingView");
     });
   });
 
@@ -247,9 +286,5 @@ describe("public type contracts", () => {
         limit: "10",
       });
     });
-  });
-
-  it("exposes NodeId as the runtime schema output type", () => {
-    expectTypeOf<z.infer<typeof nodeIdSchema>>().toEqualTypeOf<NodeId>();
   });
 });

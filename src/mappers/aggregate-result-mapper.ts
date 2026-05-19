@@ -1,6 +1,6 @@
 import type { InstancesAggregateResponse } from "../cognite";
 import type { AggregateGroupBy, AggregateOptions, AggregateResultItem, NodeId } from "../types";
-import { getSelectedGroupByKeys } from "./utils";
+import { getSelectedGroupByKeys } from "../utils";
 
 function isNodeId(value: unknown): value is NodeId {
   return (

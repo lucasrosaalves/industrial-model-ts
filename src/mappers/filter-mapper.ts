@@ -5,7 +5,7 @@ import {
   getPropertyRef,
   isViewPropertyDefinition,
   toViewReference,
-} from "./utils";
+} from "../utils";
 import type { ViewMapper } from "./view-mapper";
 
 const LEAF_OPS = new Set([
