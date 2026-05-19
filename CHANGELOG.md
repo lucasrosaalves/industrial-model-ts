@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.6.0
+
+### Minor Changes
+
+- c50512d: introduce Cognite Core client and enhance SDK structure
+
 ## 0.5.0
 
 ### Minor Changes
