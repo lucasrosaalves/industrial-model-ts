@@ -35,3 +35,23 @@ export function makeCogniteAssetQueryResult(): QueryResultMap {
     "CogniteAsset|parent": [parentNode],
   };
 }
+
+export function makeCogniteAssetQueryResultWithProperties(
+  properties: Record<string, unknown>,
+): QueryResultMap {
+  const result = makeCogniteAssetQueryResult();
+  const asset = result.CogniteAsset?.[0];
+  if (asset?.instanceType === "node") {
+    asset.properties = {
+      ...asset.properties,
+      [SPACE]: {
+        ...asset.properties?.[SPACE],
+        [ASSET_VIEW_KEY]: {
+          ...asset.properties?.[SPACE]?.[ASSET_VIEW_KEY],
+          ...properties,
+        },
+      },
+    };
+  }
+  return result;
+}

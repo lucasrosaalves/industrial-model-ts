@@ -8,9 +8,11 @@ import {
 import { DEFAULT_LIMIT, MAX_DEPENDENCY_DEPTH } from "./constants";
 import { QueryMapper } from "./mappers/query-mapper";
 import { QueryResultMapper } from "./mappers/result-mapper";
+import { QueryResultValidator } from "./mappers/result-validator";
 import { ViewMapper } from "./mappers/view-mapper";
 import type {
   DataModelId,
+  IndustrialModelClientOptions,
   QueryOptions,
   QueryResult,
   QueryResultItem,
@@ -26,13 +28,21 @@ export class IndustrialModelClient {
   private readonly cognite: CognitePort;
   private readonly queryMapper: QueryMapper;
   private readonly resultMapper: QueryResultMapper;
+  private readonly resultValidator: QueryResultValidator;
+  private readonly validateResults: boolean;
 
-  constructor(client: CogniteClient, dataModelId: DataModelId) {
+  constructor(
+    client: CogniteClient,
+    dataModelId: DataModelId,
+    options: IndustrialModelClientOptions = {},
+  ) {
     const cognite = createCogniteAdapter(client);
     this.cognite = cognite;
     const viewMapper = new ViewMapper(cognite, dataModelId);
     this.queryMapper = new QueryMapper(viewMapper);
     this.resultMapper = new QueryResultMapper(viewMapper);
+    this.resultValidator = new QueryResultValidator(viewMapper);
+    this.validateResults = options.validateResults ?? false;
   }
 
   query<TModel>() {
@@ -63,7 +73,10 @@ export class IndustrialModelClient {
         dependenciesData,
       );
 
-      const pageResult = await this.resultMapper.mapNodes(viewExternalId, queryResultData);
+      const mappedPageResult = await this.resultMapper.mapNodes(viewExternalId, queryResultData);
+      const pageResult = this.validateResults
+        ? await this.resultValidator.parseItems(viewExternalId, mappedPageResult)
+        : mappedPageResult;
       const nextCursor = queryResult.nextCursor[viewExternalId] ?? null;
       const isLastPage = pageResult.length < limit || !nextCursor;
       const resolvedCursor = isLastPage ? null : nextCursor;

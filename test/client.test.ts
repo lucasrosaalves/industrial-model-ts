@@ -3,6 +3,7 @@ import { type IndustrialModel, IndustrialModelClient, type NodeId } from "../src
 import {
   COGNITE_CORE_DATA_MODEL,
   makeCogniteAssetQueryResult,
+  makeCogniteAssetQueryResultWithProperties,
   makeCogniteClientMock,
 } from "./fixtures/index.js";
 
@@ -38,5 +39,61 @@ describe("IndustrialModelClient", () => {
       name: "Root Asset",
       parent: { externalId: "parent-asset", name: "Parent Asset" },
     });
+  });
+
+  it("preserves Cognite timestamp strings when result validation is disabled", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: makeCogniteAssetQueryResultWithProperties({
+        sourceCreatedTime: "2024-01-02T03:04:05.000Z",
+      }),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Asset = IndustrialModel<{ name: string; sourceCreatedTime: string }>;
+    const { items } = await model.query<Asset>()({
+      viewExternalId: "CogniteAsset",
+      select: { name: true, sourceCreatedTime: true },
+    });
+
+    expect(items[0]?.sourceCreatedTime).toBe("2024-01-02T03:04:05.000Z");
+  });
+
+  it("validates results and converts Cognite timestamps to Date when enabled", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: makeCogniteAssetQueryResultWithProperties({
+        sourceCreatedTime: "2024-01-02T03:04:05.000Z",
+      }),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, {
+      validateResults: true,
+    });
+
+    type Asset = IndustrialModel<{ name: string; sourceCreatedTime: Date }>;
+    const { items } = await model.query<Asset>()({
+      viewExternalId: "CogniteAsset",
+      select: { name: true, sourceCreatedTime: true },
+    });
+
+    expect(items[0]?.sourceCreatedTime).toBeInstanceOf(Date);
+    expect(items[0]?.sourceCreatedTime.toISOString()).toBe("2024-01-02T03:04:05.000Z");
+  });
+
+  it("throws when result validation finds an invalid Cognite timestamp", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: makeCogniteAssetQueryResultWithProperties({
+        sourceCreatedTime: "not-a-date",
+      }),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, {
+      validateResults: true,
+    });
+
+    type Asset = IndustrialModel<{ name: string; sourceCreatedTime: Date }>;
+    await expect(
+      model.query<Asset>()({
+        viewExternalId: "CogniteAsset",
+        select: { name: true, sourceCreatedTime: true },
+      }),
+    ).rejects.toThrow(/Invalid query result/);
   });
 });

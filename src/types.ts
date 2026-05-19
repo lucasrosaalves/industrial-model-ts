@@ -14,6 +14,10 @@ export type SortDirection = "ascending" | "descending";
 
 export type QueryResultMap = Record<string, NodeOrEdge[]>;
 
+export interface IndustrialModelClientOptions {
+  validateResults?: boolean;
+}
+
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 type Merge<A, B> = Simplify<Omit<A, keyof B> & B>;
 type NonNull<T> = Exclude<T, null | undefined>;

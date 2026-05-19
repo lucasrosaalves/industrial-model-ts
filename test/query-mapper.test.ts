@@ -209,6 +209,62 @@ describe("QueryMapper", () => {
     expect(assetView.externalId).toBe("CogniteAsset");
   });
 
+  describe("query validation", () => {
+    it("rejects unknown select properties", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          select: { namme: true } as never,
+        }),
+      ).rejects.toThrow(/select: Unrecognized key: "namme"/);
+    });
+
+    it("rejects unknown nested select properties", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          select: { parent: { namme: true } } as never,
+        }),
+      ).rejects.toThrow(/select\.parent: Unrecognized key: "namme"/);
+    });
+
+    it("rejects unknown filter properties", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          filters: { namme: { eq: "Pump" } } as never,
+        }),
+      ).rejects.toThrow(/filters: Unrecognized key: "namme"/);
+    });
+
+    it("rejects filter operators that do not match the view property type", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          filters: { name: { gt: "Pump" } } as never,
+        }),
+      ).rejects.toThrow(/filters\.name: Unrecognized key: "gt"/);
+    });
+
+    it("rejects filter values that do not match the view property type", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          filters: { name: { eq: 42 } } as never,
+        }),
+      ).rejects.toThrow(/filters\.name\.eq/);
+    });
+
+    it("rejects unknown sort properties", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          sort: { namme: "ascending" } as never,
+        }),
+      ).rejects.toThrow(/sort: Unrecognized key: "namme"/);
+    });
+  });
+
   describe("complex queries", () => {
     const viewRef = (externalId: string) => ({
       type: "view" as const,

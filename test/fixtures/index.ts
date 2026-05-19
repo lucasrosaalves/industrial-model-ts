@@ -15,4 +15,7 @@ export {
   createResultMapper,
   createViewMapper,
 } from "./mappers.js";
-export { makeCogniteAssetQueryResult } from "./query-responses.js";
+export {
+  makeCogniteAssetQueryResult,
+  makeCogniteAssetQueryResultWithProperties,
+} from "./query-responses.js";
