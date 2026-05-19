@@ -48,8 +48,8 @@ export class IndustrialModelClient {
     const cognite = createCogniteAdapter(client);
     this.cognite = cognite;
     const viewMapper = new ViewMapper(cognite, dataModelId);
-    this.queryMapper = new QueryMapper(viewMapper);
-    this.aggregateMapper = new AggregateMapper(viewMapper);
+    this.queryMapper = new QueryMapper(viewMapper, cognite);
+    this.aggregateMapper = new AggregateMapper(viewMapper, cognite);
     this.aggregateResultMapper = new AggregateResultMapper();
     this.resultMapper = new QueryResultMapper(viewMapper);
     this.resultValidator = new QueryResultValidator(viewMapper);

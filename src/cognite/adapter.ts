@@ -7,6 +7,8 @@ import type {
   InstancesAggregateResponse,
   InstancesQueryRequest,
   InstancesQueryResponse,
+  InstancesSearchRequest,
+  InstancesSearchResponse,
   ViewDefinition,
 } from "./types";
 
@@ -34,6 +36,18 @@ class CogniteSdkAdapter implements CognitePort {
     return {
       items: response.items as unknown as InstancesQueryResponse["items"],
       nextCursor: response.nextCursor,
+    };
+  }
+
+  async searchInstances(request: InstancesSearchRequest): Promise<InstancesSearchResponse> {
+    const search = (
+      this.client.instances as unknown as {
+        search: (request: InstancesSearchRequest) => Promise<{ items: unknown[] }>;
+      }
+    ).search;
+    const response = await search(request);
+    return {
+      items: response.items as unknown as InstancesSearchResponse["items"],
     };
   }
 

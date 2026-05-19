@@ -26,6 +26,7 @@ const leafOps = new Set([
   "lte",
   "exists",
   "prefix",
+  "search",
   "containsAny",
   "containsAll",
 ]);
@@ -91,27 +92,43 @@ function leafFilterSchema(
   const isList = typeof property !== "string" && property.type.list === true;
 
   if (isList) {
-    return z
-      .object({
-        containsAny: z.array(value).optional(),
-        containsAll: z.array(value).optional(),
-        exists: z.boolean().optional(),
-      })
-      .strict();
+    const shape: Record<string, z.ZodType> = {
+      containsAny: z.array(value).optional(),
+      containsAll: z.array(value).optional(),
+      exists: z.boolean().optional(),
+    };
+    if (property.type.type === "text") {
+      shape.search = z
+        .object({
+          query: z.string(),
+          operator: z.enum(["OR", "AND"]).optional(),
+        })
+        .strict()
+        .optional();
+    }
+    return z.object(shape).strict();
   }
 
   if (
     property === "node-string" ||
     (typeof property !== "string" && property.type.type === "text")
   ) {
-    return z
-      .object({
-        eq: z.string().optional(),
-        in: z.array(z.string()).optional(),
-        prefix: z.string().optional(),
-        exists: z.boolean().optional(),
-      })
-      .strict();
+    const shape: Record<string, z.ZodType> = {
+      eq: z.string().optional(),
+      in: z.array(z.string()).optional(),
+      prefix: z.string().optional(),
+      exists: z.boolean().optional(),
+    };
+    if (property !== "node-string") {
+      shape.search = z
+        .object({
+          query: z.string(),
+          operator: z.enum(["OR", "AND"]).optional(),
+        })
+        .strict()
+        .optional();
+    }
+    return z.object(shape).strict();
   }
 
   if (typeof property !== "string" && property.type.type === "enum") {

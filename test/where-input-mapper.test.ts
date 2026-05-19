@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { ViewDefinition } from "../src/cognite";
-import { createFilterMapper, getCogniteCoreView } from "./fixtures/index.js";
+import { FilterMapper } from "../src/mappers/filter-mapper";
+import {
+  createFilterMapper,
+  createViewMapper,
+  getCogniteCoreView,
+  makeCogniteMock,
+} from "./fixtures/index.js";
 
 const FLAT_VIEW = getCogniteCoreView("CogniteSchedulable");
 const ROOT_VIEW = getCogniteCoreView("CogniteAsset");
@@ -65,6 +71,105 @@ describe("FilterMapper.map", () => {
       expect(result).toEqual([
         { equals: { property: prop(ROOT_VIEW, "name"), value: "test" } },
         { prefix: { property: prop(ROOT_VIEW, "name"), value: "te" } },
+      ]);
+    });
+
+    it("maps search to instance references returned by Cognite search", async () => {
+      const cognite = makeCogniteMock();
+      cognite.searchInstances = vi.fn().mockResolvedValue({
+        items: [
+          { instanceType: "node", space: "asset-space", externalId: "asset-1" },
+          { instanceType: "node", space: "asset-space", externalId: "asset-2" },
+        ],
+      });
+      const mapper = new FilterMapper(createViewMapper(), cognite);
+
+      const result = await mapper.map(
+        { name: { search: { query: "pump motor", operator: "AND" } } },
+        ROOT_VIEW,
+      );
+
+      expect(cognite.searchInstances).toHaveBeenCalledWith({
+        view: { type: "view", space: "cdf_cdm", externalId: "CogniteAsset", version: "v1" },
+        query: "pump motor",
+        instanceType: "node",
+        properties: ["name"],
+        operator: "AND",
+        limit: 1_000,
+      });
+      expect(result).toEqual([
+        {
+          instanceReferences: [
+            { space: "asset-space", externalId: "asset-1" },
+            { space: "asset-space", externalId: "asset-2" },
+          ],
+        },
+      ]);
+    });
+
+    it("keeps normal string operators when a field also has search", async () => {
+      const cognite = makeCogniteMock();
+      cognite.searchInstances = vi.fn().mockResolvedValue({
+        items: [{ instanceType: "node", space: "asset-space", externalId: "asset-1" }],
+      });
+      const mapper = new FilterMapper(createViewMapper(), cognite);
+
+      const result = await mapper.map(
+        { name: { prefix: "pump", search: { query: "motor" } } },
+        ROOT_VIEW,
+      );
+
+      expect(cognite.searchInstances).toHaveBeenCalledWith(
+        expect.objectContaining({ query: "motor", operator: "OR", properties: ["name"] }),
+      );
+      expect(result).toEqual([
+        { prefix: { property: prop(ROOT_VIEW, "name"), value: "pump" } },
+        { instanceReferences: [{ space: "asset-space", externalId: "asset-1" }] },
+      ]);
+    });
+
+    it("maps an empty search response to an empty instance reference filter", async () => {
+      const cognite = makeCogniteMock();
+      cognite.searchInstances = vi.fn().mockResolvedValue({ items: [] });
+      const mapper = new FilterMapper(createViewMapper(), cognite);
+
+      const result = await mapper.map({ name: { search: { query: "not found" } } }, ROOT_VIEW);
+
+      expect(result).toEqual([{ instanceReferences: [] }]);
+    });
+
+    it("runs one search per searched property", async () => {
+      const cognite = makeCogniteMock();
+      cognite.searchInstances = vi
+        .fn()
+        .mockResolvedValueOnce({
+          items: [{ instanceType: "node", space: "asset-space", externalId: "by-name" }],
+        })
+        .mockResolvedValueOnce({
+          items: [{ instanceType: "node", space: "asset-space", externalId: "by-description" }],
+        });
+      const mapper = new FilterMapper(createViewMapper(), cognite);
+
+      const result = await mapper.map(
+        {
+          name: { search: { query: "pump" } },
+          description: { search: { query: "motor" } },
+        },
+        ROOT_VIEW,
+      );
+
+      expect(cognite.searchInstances).toHaveBeenCalledTimes(2);
+      expect(cognite.searchInstances).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ query: "pump", properties: ["name"] }),
+      );
+      expect(cognite.searchInstances).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ query: "motor", properties: ["description"] }),
+      );
+      expect(result).toEqual([
+        { instanceReferences: [{ space: "asset-space", externalId: "by-name" }] },
+        { instanceReferences: [{ space: "asset-space", externalId: "by-description" }] },
       ]);
     });
   });
@@ -248,6 +353,39 @@ describe("FilterMapper.map", () => {
         },
       ]);
     });
+
+    it("supports search inside OR branches", async () => {
+      const cognite = makeCogniteMock();
+      cognite.searchInstances = vi
+        .fn()
+        .mockResolvedValueOnce({
+          items: [{ instanceType: "node", space: "asset-space", externalId: "pump-1" }],
+        })
+        .mockResolvedValueOnce({
+          items: [{ instanceType: "node", space: "asset-space", externalId: "motor-1" }],
+        });
+      const mapper = new FilterMapper(createViewMapper(), cognite);
+
+      const result = await mapper.map(
+        {
+          OR: [
+            { name: { search: { query: "pump" } } },
+            { description: { search: { query: "motor", operator: "AND" } } },
+          ],
+        },
+        ROOT_VIEW,
+      );
+
+      expect(cognite.searchInstances).toHaveBeenCalledTimes(2);
+      expect(result).toEqual([
+        {
+          or: [
+            { instanceReferences: [{ space: "asset-space", externalId: "pump-1" }] },
+            { instanceReferences: [{ space: "asset-space", externalId: "motor-1" }] },
+          ],
+        },
+      ]);
+    });
   });
 
   describe("NOT operator", () => {
@@ -307,6 +445,38 @@ describe("FilterMapper.map", () => {
                 { equals: { property: prop(PARENT_VIEW, "name"), value: "root" } },
                 { prefix: { property: prop(PARENT_VIEW, "description"), value: "P" } },
               ],
+            },
+          },
+        },
+      ]);
+    });
+
+    it("supports search inside nested relation filters", async () => {
+      const cognite = makeCogniteMock();
+      cognite.searchInstances = vi.fn().mockResolvedValue({
+        items: [{ instanceType: "node", space: "asset-space", externalId: "parent-1" }],
+      });
+      const mapper = new FilterMapper(createViewMapper(), cognite);
+
+      const result = await mapper.map(
+        { parent: { name: { search: { query: "root parent", operator: "AND" } } } },
+        ROOT_VIEW,
+      );
+
+      expect(cognite.searchInstances).toHaveBeenCalledWith({
+        view: { type: "view", space: "cdf_cdm", externalId: "CogniteAsset", version: "v1" },
+        query: "root parent",
+        instanceType: "node",
+        properties: ["name"],
+        operator: "AND",
+        limit: 1_000,
+      });
+      expect(result).toEqual([
+        {
+          nested: {
+            scope: prop(ROOT_VIEW, "parent"),
+            filter: {
+              instanceReferences: [{ space: "asset-space", externalId: "parent-1" }],
             },
           },
         },

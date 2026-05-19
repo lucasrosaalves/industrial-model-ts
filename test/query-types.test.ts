@@ -167,4 +167,25 @@ describe("query typing", () => {
     expectTypeOf<Item["description"]>().toEqualTypeOf<string>();
     expectTypeOf<Item["parent"]>().toEqualTypeOf<NodeId | undefined>();
   });
+
+  it("accepts search filters on string and string-list fields", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: makeCogniteAssetQueryResult(),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    const { items } = await model.query<CogniteAsset>()({
+      viewExternalId: "CogniteAsset",
+      select: { name: true, tags: true },
+      filters: {
+        name: { search: { query: "root asset", operator: "AND" } },
+        tags: { search: { query: "critical" } },
+      },
+    });
+
+    type Item = (typeof items)[number];
+
+    expectTypeOf<Item["name"]>().toEqualTypeOf<string>();
+    expectTypeOf<Item["tags"]>().toEqualTypeOf<string[]>();
+  });
 });

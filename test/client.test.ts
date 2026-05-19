@@ -53,6 +53,49 @@ describe("IndustrialModelClient", () => {
     });
   });
 
+  it("runs query with text search filters through the Cognite search API", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: makeCogniteAssetQueryResult(),
+      searchResponse: {
+        items: [{ instanceType: "node", space: "asset-space", externalId: "root-asset" }],
+      },
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Asset = IndustrialModel<{ name: string }>;
+    const { items } = await model.query<Asset>()({
+      viewExternalId: "CogniteAsset",
+      select: { name: true },
+      filters: { name: { search: { query: "root asset", operator: "AND" } } },
+    });
+
+    const search = (client.instances as unknown as { search: unknown }).search;
+    expect(search).toHaveBeenCalledWith({
+      view: { type: "view", space: "cdf_cdm", externalId: "CogniteAsset", version: "v1" },
+      query: "root asset",
+      instanceType: "node",
+      properties: ["name"],
+      operator: "AND",
+      limit: 1_000,
+    });
+    expect(client.instances.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        with: expect.objectContaining({
+          CogniteAsset: expect.objectContaining({
+            nodes: {
+              filter: {
+                and: expect.arrayContaining([
+                  { instanceReferences: [{ space: "asset-space", externalId: "root-asset" }] },
+                ]),
+              },
+            },
+          }),
+        }),
+      }),
+    );
+    expect(items).toHaveLength(1);
+  });
+
   it("preserves Cognite timestamp strings when result validation is disabled", async () => {
     const client = makeCogniteClientMock({
       queryItems: makeCogniteAssetQueryResultWithProperties({
@@ -165,6 +208,41 @@ describe("IndustrialModelClient", () => {
       group: { name: "Root Asset" },
       aggregate: { value: 3 },
     });
+  });
+
+  it("runs aggregate with text search filters through the Cognite search API", async () => {
+    const client = makeCogniteClientMock({
+      searchResponse: {
+        items: [{ instanceType: "node", space: "asset-space", externalId: "root-asset" }],
+      },
+      aggregateResponse: makeCogniteAssetGlobalCountResponse(),
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Asset = IndustrialModel<{ name: string }>;
+    const { items } = await model.aggregate<Asset>()({
+      viewExternalId: "CogniteAsset",
+      aggregate: { count: {} },
+      filters: { name: { search: { query: "root asset" } } },
+    });
+
+    const search = (client.instances as unknown as { search: unknown }).search;
+    expect(search).toHaveBeenCalledWith({
+      view: { type: "view", space: "cdf_cdm", externalId: "CogniteAsset", version: "v1" },
+      query: "root asset",
+      instanceType: "node",
+      properties: ["name"],
+      operator: "OR",
+      limit: 1_000,
+    });
+    expect(client.instances.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        filter: {
+          instanceReferences: [{ space: "asset-space", externalId: "root-asset" }],
+        },
+      }),
+    );
+    expect(items[0]?.aggregate?.value).toBe(42);
   });
 
   it("runs aggregate with a global count", async () => {

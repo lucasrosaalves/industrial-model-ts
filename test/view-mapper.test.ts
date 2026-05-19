@@ -31,6 +31,7 @@ describe("ViewMapper", () => {
     const cognite: CognitePort = {
       retrieveDataModels: vi.fn().mockResolvedValue({ items: [] }),
       queryInstances: vi.fn(),
+      searchInstances: vi.fn(),
       aggregateInstances: vi.fn(),
     };
     const mapper = new ViewMapper(cognite, DATA_MODEL);
@@ -71,6 +72,7 @@ describe("ViewMapper", () => {
         ],
       }),
       queryInstances: vi.fn(),
+      searchInstances: vi.fn(),
       aggregateInstances: vi.fn(),
     };
     const mapper = new ViewMapper(cognite, DATA_MODEL);

@@ -1,6 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { AggregateMapper } from "../src/mappers/aggregate-mapper";
 import type { AggregateDefinition } from "../src/types.js";
-import { COGNITE_CORE_DATA_MODEL, createAggregateMapper } from "./fixtures/index.js";
+import {
+  COGNITE_CORE_DATA_MODEL,
+  createAggregateMapper,
+  createViewMapper,
+  makeCogniteMock,
+} from "./fixtures/index.js";
 
 type PointCloudVolume = {
   name: string;
@@ -41,6 +47,51 @@ describe("AggregateMapper", () => {
     });
 
     expect(request.filter).toBeUndefined();
+  });
+
+  it("uses search filters when building aggregate requests", async () => {
+    const cognite = makeCogniteMock();
+    cognite.searchInstances = vi.fn().mockResolvedValue({
+      items: [{ instanceType: "node", space: "asset-space", externalId: "asset-1" }],
+    });
+    const searchMapper = new AggregateMapper(createViewMapper(), cognite);
+
+    const request = await searchMapper.map<{ name: string }>({
+      viewExternalId: "CogniteAsset",
+      aggregate: { count: {} },
+      filters: { name: { search: { query: "pump" } } },
+    });
+
+    expect(cognite.searchInstances).toHaveBeenCalledWith(
+      expect.objectContaining({ query: "pump", properties: ["name"], operator: "OR" }),
+    );
+    expect(request.filter).toEqual({
+      instanceReferences: [{ space: "asset-space", externalId: "asset-1" }],
+    });
+  });
+
+  it("combines search filters with normal aggregate filters", async () => {
+    const cognite = makeCogniteMock();
+    cognite.searchInstances = vi.fn().mockResolvedValue({
+      items: [{ instanceType: "node", space: "asset-space", externalId: "asset-1" }],
+    });
+    const searchMapper = new AggregateMapper(createViewMapper(), cognite);
+
+    const request = await searchMapper.map<{ name: string; sourceId: string }>({
+      viewExternalId: "CogniteAsset",
+      aggregate: { count: {} },
+      filters: {
+        name: { search: { query: "pump" } },
+        sourceId: { eq: "sap" },
+      },
+    });
+
+    expect(request.filter).toEqual({
+      and: [
+        { equals: { property: ["cdf_cdm", "CogniteAsset/v1", "sourceId"], value: "sap" } },
+        { instanceReferences: [{ space: "asset-space", externalId: "asset-1" }] },
+      ],
+    });
   });
 
   it.each([
@@ -116,6 +167,16 @@ describe("AggregateMapper", () => {
         groupBy: { tags: true },
       }),
     ).rejects.toThrow(/Invalid aggregate options/);
+  });
+
+  it("rejects invalid search filters in aggregate requests", async () => {
+    await expect(
+      mapper.map<{ name: string }>({
+        viewExternalId: "CogniteAsset",
+        aggregate: { count: {} },
+        filters: { name: { search: { query: "pump", operator: "NEAR" } } } as never,
+      }),
+    ).rejects.toThrow(/filters\.name\.search\.operator/);
   });
 
   it("rejects more than five groupBy properties", async () => {

@@ -53,10 +53,12 @@ describe("public type contracts", () => {
         filters: {
           AND: [
             { name: { prefix: "Pump" } },
+            { name: { search: { query: "booster pump", operator: "AND" } } },
             { score: { gte: 10 } },
             { active: { eq: true } },
             { parent: { name: { eq: "Root Asset" } } },
             { tags: { containsAny: ["critical", "pump"] } },
+            { tags: { search: { query: "critical" } } },
             { sourceCreatedTime: { gt: "2024-01-01T00:00:00.000Z" } },
           ],
           OR: [{ assetClass: { code: { eq: "PUMP" } } }, { description: { exists: false } }],
@@ -161,9 +163,32 @@ describe("public type contracts", () => {
       void query({
         viewExternalId: "CogniteAsset",
         filters: {
+          name: {
+            search: {
+              query: "Pump",
+              // @ts-expect-error search operator must be OR or AND
+              operator: "NEAR",
+            },
+          },
+        },
+      });
+
+      void query({
+        viewExternalId: "CogniteAsset",
+        filters: {
           score: {
             // @ts-expect-error number filters require number values
             gte: "10",
+          },
+        },
+      });
+
+      void query({
+        viewExternalId: "CogniteAsset",
+        filters: {
+          score: {
+            // @ts-expect-error search is only available on string fields and string-list fields
+            search: { query: "10" },
           },
         },
       });
