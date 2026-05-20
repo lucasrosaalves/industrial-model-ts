@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.7.0
+
+### Minor Changes
+
+- cd7e67f: add upsert and delete functionality to IndustrialModelClient
+
 ## 0.6.0
 
 ### Minor Changes
