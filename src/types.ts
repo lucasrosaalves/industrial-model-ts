@@ -290,6 +290,82 @@ export type AggregateExecutor<TModel> = <const TOptions extends AggregateOptions
   AggregateResult<AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregate"]>>
 >;
 
+type RelationReferenceValue<T> = [NonNull<T>] extends [readonly unknown[]] ? NodeId[] : NodeId;
+type NodeIdLike = { space: string; externalId: string };
+
+type ArrayReferencePropertyKeys<TModel> = {
+  [K in keyof ModelProps<TModel>]: [NonNull<ModelProps<TModel>[K]>] extends [readonly unknown[]]
+    ? [ArrayItem<NonNull<ModelProps<TModel>[K]>>] extends [NodeIdLike]
+      ? K
+      : never
+    : never;
+}[keyof ModelProps<TModel>];
+
+type ArrayRelationKeys<TModel> = {
+  [K in RelationKeys<TModel>]: [NonNull<ModelRelations<TModel>[K]>] extends [readonly unknown[]]
+    ? K
+    : never;
+}[RelationKeys<TModel>];
+
+export type UpsertProperties<TModel> = Simplify<
+  Partial<ModelProps<TModel>> & {
+    [K in RelationKeys<TModel>]?: RelationReferenceValue<ModelRelations<TModel>[K]>;
+  }
+>;
+
+export type UpsertNode<TModel> = Simplify<
+  NodeId & Partial<Omit<UpsertProperties<TModel>, keyof NodeId>>
+>;
+
+export interface EdgeCreationContext {
+  startNode: NodeId;
+  endNode: NodeId;
+  edgeType: NodeId;
+}
+
+export type EdgeCreationCallback = (context: EdgeCreationContext) => NodeId;
+export type EdgeCreationCallbacks<TProperty extends string = string> = Partial<
+  Record<TProperty, EdgeCreationCallback>
+>;
+export type OnEdgeCreation<TModel> = EdgeCreationCallbacks<
+  Extract<ArrayReferencePropertyKeys<TModel> | ArrayRelationKeys<TModel>, string>
+>;
+export type EdgeMode = "append" | "replace";
+
+export interface UpsertOptions<TModel> {
+  viewExternalId: string;
+  items: UpsertNode<TModel>[];
+  onEdgeCreation?: OnEdgeCreation<TModel>;
+  replace?: boolean;
+  edgeMode?: EdgeMode;
+}
+
+export type UpsertResultItem = {
+  instanceType: "node" | "edge";
+  version?: number;
+  wasModified?: boolean;
+  space: string;
+  externalId: string;
+  createdTime?: number;
+  lastUpdatedTime?: number;
+};
+
+export interface UpsertResult {
+  items: UpsertResultItem[];
+}
+
+export type UpsertExecutor<TModel> = (options: UpsertOptions<TModel>) => Promise<UpsertResult>;
+
+export type DeleteResultItem = Omit<UpsertResultItem, "instanceType"> & {
+  instanceType: "node";
+};
+
+export interface DeleteResult {
+  items: DeleteResultItem[];
+}
+
+export type DeleteExecutor = <TItem extends NodeId>(items: TItem[]) => Promise<DeleteResult>;
+
 export type SearchFilter = { query: string; operator?: "OR" | "AND" };
 
 export type StringFilters = {

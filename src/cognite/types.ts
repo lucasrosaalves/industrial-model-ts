@@ -1,4 +1,4 @@
-import type { DataModelId, SortDirection } from "../types";
+import type { DataModelId, NodeId, SortDirection } from "../types";
 
 export interface ViewReference {
   type: "view";
@@ -108,6 +108,56 @@ export interface InstancesQueryRequest {
   with: Record<string, QueryTableExpression>;
   select: Record<string, QuerySelectExpression | Record<string, never>>;
   cursors?: Record<string, string>;
+}
+
+export interface InstancesApplySource {
+  source: ViewReference;
+  properties: Record<string, unknown>;
+}
+
+export interface InstancesApplyNodeWrite {
+  instanceType: "node";
+  space: string;
+  externalId: string;
+  existingVersion?: number;
+  sources?: InstancesApplySource[];
+}
+
+export interface InstancesApplyEdgeWrite {
+  instanceType: "edge";
+  space: string;
+  externalId: string;
+  type: unknown;
+  startNode: NodeId;
+  endNode: NodeId;
+  existingVersion?: number;
+  sources?: InstancesApplySource[];
+}
+
+export interface InstancesApplyDelete {
+  instanceType: "node" | "edge";
+  space: string;
+  externalId: string;
+}
+
+export interface InstancesApplyRequest {
+  items: Array<InstancesApplyNodeWrite | InstancesApplyEdgeWrite>;
+  delete?: InstancesApplyDelete[];
+  replace?: boolean;
+}
+
+export interface InstancesApplyResultItem {
+  instanceType: "node" | "edge";
+  version?: number;
+  wasModified?: boolean;
+  space: string;
+  externalId: string;
+  createdTime?: number;
+  lastUpdatedTime?: number;
+}
+
+export interface InstancesApplyResponse {
+  items: InstancesApplyResultItem[];
 }
 
 export interface NodeDefinition {

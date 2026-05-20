@@ -4,6 +4,8 @@ import type {
   DataModelRetrieveOptions,
   InstancesAggregateRequest,
   InstancesAggregateResponse,
+  InstancesApplyRequest,
+  InstancesApplyResponse,
   InstancesQueryRequest,
   InstancesQueryResponse,
   InstancesSearchRequest,
@@ -21,4 +23,6 @@ export interface CognitePort {
   searchInstances(request: InstancesSearchRequest): Promise<InstancesSearchResponse>;
 
   aggregateInstances(request: InstancesAggregateRequest): Promise<InstancesAggregateResponse>;
+
+  applyInstances(request: InstancesApplyRequest): Promise<InstancesApplyResponse>;
 }

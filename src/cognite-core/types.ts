@@ -8,6 +8,8 @@ import type {
   QueryResult,
   QueryResultItem,
   QuerySelect,
+  UpsertOptions,
+  UpsertResult,
 } from "../types";
 
 export type CogniteCoreViewExternalId =
@@ -682,3 +684,7 @@ export type CogniteCoreAggregateExecutor<TView extends CogniteCoreViewExternalId
     AggregateResultItem<CogniteCoreModel<TView>, TOptions["groupBy"], TOptions["aggregate"]>
   >
 >;
+
+export type CogniteCoreUpsertExecutor<TView extends CogniteCoreViewExternalId> = (
+  options: Omit<UpsertOptions<CogniteCoreModel<TView>>, "viewExternalId">,
+) => Promise<UpsertResult>;

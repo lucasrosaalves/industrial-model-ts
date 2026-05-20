@@ -3,13 +3,17 @@ import { IndustrialModelClient } from "../client";
 import type {
   AggregateOptions,
   DataModelId,
+  DeleteResult,
   IndustrialModelClientOptions,
+  NodeId,
   QueryOptions,
+  UpsertOptions,
 } from "../types";
 import type {
   CogniteCoreAggregateExecutor,
   CogniteCoreModel,
   CogniteCoreQueryExecutor,
+  CogniteCoreUpsertExecutor,
   CogniteCoreViewExternalId,
 } from "./types";
 
@@ -49,5 +53,19 @@ export class CogniteCoreClient {
     ) => aggregate({ ...options, viewExternalId });
 
     return execute as CogniteCoreAggregateExecutor<TView>;
+  }
+
+  upsert<TView extends CogniteCoreViewExternalId>(
+    viewExternalId: TView,
+  ): CogniteCoreUpsertExecutor<TView> {
+    const upsert = this.model.upsert<CogniteCoreModel<TView>>();
+    const execute = (options: Omit<UpsertOptions<CogniteCoreModel<TView>>, "viewExternalId">) =>
+      upsert({ ...options, viewExternalId });
+
+    return execute as CogniteCoreUpsertExecutor<TView>;
+  }
+
+  delete<TItem extends NodeId>(items: TItem[]): Promise<DeleteResult> {
+    return this.model.delete(items);
   }
 }
