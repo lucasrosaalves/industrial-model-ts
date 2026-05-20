@@ -5,6 +5,8 @@ import type {
   DataModelRetrieveOptions,
   InstancesAggregateRequest,
   InstancesAggregateResponse,
+  InstancesApplyRequest,
+  InstancesApplyResponse,
   InstancesQueryRequest,
   InstancesQueryResponse,
   InstancesSearchRequest,
@@ -59,6 +61,18 @@ class CogniteSdkAdapter implements CognitePort {
     );
     return {
       items: response.items as unknown as InstancesAggregateResponse["items"],
+    };
+  }
+
+  async applyInstances(request: InstancesApplyRequest): Promise<InstancesApplyResponse> {
+    const apply = (
+      this.client.instances as unknown as {
+        apply: (request: InstancesApplyRequest) => Promise<{ items: unknown[] }>;
+      }
+    ).apply;
+    const response = await apply(request);
+    return {
+      items: response.items as unknown as InstancesApplyResponse["items"],
     };
   }
 }

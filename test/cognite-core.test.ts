@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, type vi } from "vitest";
 import type { NodeDefinition } from "../src/cognite";
 import { COGNITE_CORE_DATA_MODEL, CogniteCoreClient } from "../src/cognite-core/index.js";
 import {
@@ -107,6 +107,26 @@ describe("Cognite Core module", () => {
         name: "Parent Asset",
       },
     });
+  });
+
+  it("deletes Cognite Core nodes without requiring a view name", async () => {
+    const client = makeCogniteClientMock({
+      applyResponse: {
+        items: [{ instanceType: "node", space: "asset-space", externalId: "pump-1" }],
+      },
+    });
+    const core = new CogniteCoreClient(client);
+
+    const result = await core.delete([{ space: "asset-space", externalId: "pump-1" }]);
+
+    const apply = (client.instances as unknown as { apply: ReturnType<typeof vi.fn> }).apply;
+    expect(apply).toHaveBeenCalledWith({
+      items: [],
+      delete: [{ instanceType: "node", space: "asset-space", externalId: "pump-1" }],
+    });
+    expect(result.items).toEqual([
+      { instanceType: "node", space: "asset-space", externalId: "pump-1" },
+    ]);
   });
 
   it("maps reverse relation results for generated entity relations", async () => {
@@ -256,6 +276,41 @@ describe("Cognite Core module", () => {
     expect(items).toEqual([
       { group: { name: "Root Asset" }, aggregate: { value: 3 } },
       { group: { name: "Parent Asset" }, aggregate: { value: 1 } },
+    ]);
+  });
+
+  it("upserts Cognite Core views without requiring a viewExternalId option", async () => {
+    const client = makeCogniteClientMock({
+      applyResponse: {
+        items: [{ instanceType: "node", space: "asset-space", externalId: "pump-1" }],
+      },
+    });
+    const core = new CogniteCoreClient(client);
+
+    const result = await core.upsert("CogniteAsset")({
+      items: [
+        {
+          space: "asset-space",
+          externalId: "pump-1",
+          name: "Pump 1",
+        },
+      ],
+    });
+
+    const apply = (client.instances as unknown as { apply: ReturnType<typeof vi.fn> }).apply;
+    expect(apply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [
+          expect.objectContaining({
+            instanceType: "node",
+            space: "asset-space",
+            externalId: "pump-1",
+          }),
+        ],
+      }),
+    );
+    expect(result.items).toEqual([
+      { instanceType: "node", space: "asset-space", externalId: "pump-1" },
     ]);
   });
 });

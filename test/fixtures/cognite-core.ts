@@ -45,6 +45,7 @@ export function makeCogniteMock(
     queryInstances: vi.fn(),
     searchInstances: vi.fn(),
     aggregateInstances: vi.fn(),
+    applyInstances: vi.fn(),
   };
 }
 
@@ -66,6 +67,7 @@ export function makeCogniteClientMock(options?: {
   nextCursor?: Record<string, string>;
   searchResponse?: InstancesSearchResponse;
   aggregateResponse?: import("../../src/cognite").InstancesAggregateResponse;
+  applyResponse?: import("../../src/cognite").InstancesApplyResponse;
 }): CogniteClient {
   return {
     dataModels: {
@@ -78,6 +80,7 @@ export function makeCogniteClientMock(options?: {
       }),
       search: vi.fn().mockResolvedValue(options?.searchResponse ?? { items: [] }),
       aggregate: vi.fn().mockResolvedValue(options?.aggregateResponse ?? { items: [] }),
+      apply: vi.fn().mockResolvedValue(options?.applyResponse ?? { items: [] }),
     },
   } as unknown as CogniteClient;
 }

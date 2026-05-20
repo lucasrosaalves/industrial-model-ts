@@ -23,6 +23,7 @@ export {
   createFilterMapper,
   createQueryMapper,
   createResultMapper,
+  createUpsertMapper,
   createViewMapper,
 } from "./mappers.js";
 export {

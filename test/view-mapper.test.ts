@@ -33,6 +33,7 @@ describe("ViewMapper", () => {
       queryInstances: vi.fn(),
       searchInstances: vi.fn(),
       aggregateInstances: vi.fn(),
+      applyInstances: vi.fn(),
     };
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     await expect(mapper.getView("ViewA")).rejects.toThrow("not found");
@@ -74,6 +75,7 @@ describe("ViewMapper", () => {
       queryInstances: vi.fn(),
       searchInstances: vi.fn(),
       aggregateInstances: vi.fn(),
+      applyInstances: vi.fn(),
     };
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     const view = await mapper.getView("NewView");

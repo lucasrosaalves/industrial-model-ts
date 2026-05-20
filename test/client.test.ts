@@ -175,6 +175,232 @@ describe("IndustrialModelClient", () => {
     expect(items[0]).not.toHaveProperty("sourceCreatedTime");
   });
 
+  it("runs upsert end-to-end with mocked CogniteClient", async () => {
+    const client = makeCogniteClientMock({
+      applyResponse: {
+        items: [
+          {
+            instanceType: "node",
+            space: "asset-space",
+            externalId: "pump-1",
+            version: 1,
+            wasModified: true,
+          },
+        ],
+      },
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Asset = IndustrialModel<{ name?: string; parent?: NodeId }>;
+    const result = await model.upsert<Asset>()({
+      viewExternalId: "CogniteAsset",
+      items: [
+        {
+          space: "asset-space",
+          externalId: "pump-1",
+          name: "Pump 1",
+          parent: { space: "asset-space", externalId: "root" },
+        },
+      ],
+    });
+
+    const apply = (client.instances as unknown as { apply: ReturnType<typeof vi.fn> }).apply;
+    expect(apply).toHaveBeenCalledWith({
+      items: [
+        {
+          instanceType: "node",
+          space: "asset-space",
+          externalId: "pump-1",
+          sources: [
+            {
+              source: {
+                type: "view",
+                space: "cdf_cdm",
+                externalId: "CogniteAsset",
+                version: "v1",
+              },
+              properties: {
+                name: "Pump 1",
+                parent: { space: "asset-space", externalId: "root" },
+              },
+            },
+          ],
+        },
+      ],
+    });
+    expect(result.items).toEqual([
+      {
+        instanceType: "node",
+        space: "asset-space",
+        externalId: "pump-1",
+        version: 1,
+        wasModified: true,
+      },
+    ]);
+  });
+
+  it("splits root upserts above Cognite's single-request item limit", async () => {
+    const client = makeCogniteClientMock({
+      applyResponse: { items: [] },
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+    const items = Array.from({ length: 1001 }, (_, index) => ({
+      space: "asset-space",
+      externalId: `pump-${index}`,
+      name: `Pump ${index}`,
+    }));
+
+    type Asset = IndustrialModel<{ name?: string }>;
+    await model.upsert<Asset>()({
+      viewExternalId: "CogniteAsset",
+      items,
+    });
+
+    const apply = (client.instances as unknown as { apply: ReturnType<typeof vi.fn> }).apply;
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(apply.mock.calls[0]?.[0].items).toHaveLength(1000);
+    expect(apply.mock.calls[1]?.[0].items).toHaveLength(1);
+  });
+
+  it("splits edge writes above Cognite's single-request item limit", async () => {
+    const client = makeCogniteClientMock({
+      applyResponse: { items: [] },
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+    const images360 = Array.from({ length: 1001 }, (_, index) => ({
+      space: "image-space",
+      externalId: `image-${index}`,
+    }));
+
+    type Object3D = IndustrialModel<{ name?: string }, { images360?: NodeId[] }>;
+    await model.upsert<Object3D>()({
+      viewExternalId: "Cognite3DObject",
+      items: [
+        {
+          space: "object-space",
+          externalId: "object-1",
+          images360,
+        },
+      ],
+      onEdgeCreation: {
+        images360: ({ startNode, endNode, edgeType }) => ({
+          space: startNode.space,
+          externalId: `${startNode.externalId}-${edgeType.externalId}-${endNode.externalId}`,
+        }),
+      },
+    });
+
+    const apply = (client.instances as unknown as { apply: ReturnType<typeof vi.fn> }).apply;
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(apply.mock.calls[0]?.[0].items).toHaveLength(1000);
+    expect(apply.mock.calls[1]?.[0].items).toHaveLength(2);
+  });
+
+  it("splits large edge replacement upserts into multiple Cognite apply calls", async () => {
+    const existingEdges = Array.from({ length: 1000 }, (_, index) => ({
+      instanceType: "edge" as const,
+      space: "object-space",
+      externalId: `old-edge-${index}`,
+      startNode: { space: "object-space", externalId: "object-1" },
+      endNode: { space: "image-space", externalId: `old-image-${index}` },
+    }));
+    const client = makeCogniteClientMock({
+      queryItems: { images360Edges: existingEdges },
+      applyResponse: { items: [] },
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Object3D = IndustrialModel<{ name?: string }, { images360?: NodeId[] }>;
+    await model.upsert<Object3D>()({
+      viewExternalId: "Cognite3DObject",
+      edgeMode: "replace",
+      items: [
+        {
+          space: "object-space",
+          externalId: "object-1",
+          images360: [],
+        },
+      ],
+    });
+
+    const apply = (client.instances as unknown as { apply: ReturnType<typeof vi.fn> }).apply;
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(apply.mock.calls[0]?.[0]).toMatchObject({
+      items: [],
+      delete: expect.arrayContaining([
+        { instanceType: "edge", space: "object-space", externalId: "old-edge-0" },
+      ]),
+    });
+    expect(apply.mock.calls[0]?.[0].delete).toHaveLength(1000);
+    expect(apply.mock.calls[1]?.[0]).toEqual({
+      items: [{ instanceType: "node", space: "object-space", externalId: "object-1" }],
+    });
+  });
+
+  it("deletes nodes end-to-end with mocked CogniteClient", async () => {
+    const client = makeCogniteClientMock({
+      applyResponse: {
+        items: [
+          {
+            instanceType: "node",
+            space: "asset-space",
+            externalId: "pump-1",
+            version: 2,
+            wasModified: true,
+          },
+        ],
+      },
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    const result = await model.delete([
+      { space: "asset-space", externalId: "pump-1", name: "Pump 1" },
+    ]);
+
+    const apply = (client.instances as unknown as { apply: ReturnType<typeof vi.fn> }).apply;
+    expect(apply).toHaveBeenCalledWith({
+      items: [],
+      delete: [{ instanceType: "node", space: "asset-space", externalId: "pump-1" }],
+    });
+    expect(result.items).toEqual([
+      {
+        instanceType: "node",
+        space: "asset-space",
+        externalId: "pump-1",
+        version: 2,
+        wasModified: true,
+      },
+    ]);
+  });
+
+  it("splits delete requests above Cognite's single-request item limit", async () => {
+    const client = makeCogniteClientMock();
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+    const items = Array.from({ length: 1001 }, (_, index) => ({
+      space: "asset-space",
+      externalId: `pump-${index}`,
+    }));
+
+    await model.delete(items);
+
+    const apply = (client.instances as unknown as { apply: ReturnType<typeof vi.fn> }).apply;
+    expect(apply).toHaveBeenCalledTimes(2);
+    expect(apply.mock.calls[0]?.[0].delete).toHaveLength(1000);
+    expect(apply.mock.calls[1]?.[0].delete).toHaveLength(1);
+  });
+
+  it("rejects malformed delete node identities before calling Cognite", async () => {
+    const client = makeCogniteClientMock();
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    await expect(model.delete([{ space: "asset-space" } as never])).rejects.toThrow(
+      /expected NodeId values/,
+    );
+
+    const apply = (client.instances as unknown as { apply: ReturnType<typeof vi.fn> }).apply;
+    expect(apply).not.toHaveBeenCalled();
+  });
+
   it("runs aggregate end-to-end with grouped count", async () => {
     const client = makeCogniteClientMock({
       aggregateResponse: makeCogniteAssetAggregateByNameResponse(),

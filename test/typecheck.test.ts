@@ -1,6 +1,7 @@
 import { describe, expectTypeOf, it } from "vitest";
 import type { CogniteCoreClient, CogniteCoreModel } from "../src/cognite-core/index.js";
 import type {
+  DeleteResult,
   IndustrialModel,
   IndustrialModelClient,
   NodeId,
@@ -21,6 +22,7 @@ type Asset = IndustrialModel<
     score: number;
     active: boolean;
     parent?: NodeId;
+    path?: Array<NodeId & { name?: string }>;
     tags: string[];
     sourceCreatedTime: Date;
   },
@@ -119,6 +121,9 @@ describe("public type contracts", () => {
       expectTypeOf<Item["children"]>().toEqualTypeOf<
         QueryResultItem<CogniteCoreModel<"CogniteAsset">, { readonly name: true }>[] | undefined
       >();
+
+      const deleteResult = core.delete([{ space: "asset-space", externalId: "pump-1" }]);
+      expectTypeOf(deleteResult).toEqualTypeOf<Promise<DeleteResult>>();
 
       // @ts-expect-error view names are constrained to Cognite Core views.
       core.query("CogniteMissingView");
@@ -285,6 +290,153 @@ describe("public type contracts", () => {
         // @ts-expect-error limit must be a number
         limit: "10",
       });
+    });
+  });
+
+  it("accepts typed upsert patches and relation references", () => {
+    typecheckOnly(() => {
+      const upsert = (null as unknown as IndustrialModelClient).upsert<Asset>();
+      const result = upsert({
+        viewExternalId: "CogniteAsset",
+        items: [
+          {
+            space: "asset-space",
+            externalId: "pump-1",
+            name: "Pump 1",
+            parent: { space: "asset-space", externalId: "root" },
+            path: [{ space: "asset-space", externalId: "root", name: "Root" }],
+            children: [{ space: "asset-space", externalId: "child-1" }],
+          },
+        ],
+        replace: true,
+        edgeMode: "append",
+        onEdgeCreation: {
+          path: ({ startNode, endNode }) => ({
+            space: startNode.space,
+            externalId: `${startNode.externalId}:${endNode.externalId}`,
+          }),
+          children: ({ startNode, endNode, edgeType }) => ({
+            space: edgeType.space,
+            externalId: `${startNode.externalId}:${endNode.externalId}`,
+          }),
+        },
+      });
+
+      expectTypeOf<Awaited<typeof result>["items"][number]["externalId"]>().toEqualTypeOf<string>();
+    });
+  });
+
+  it("rejects upsert inputs that do not match the model", () => {
+    typecheckOnly(() => {
+      const upsert = (null as unknown as IndustrialModelClient).upsert<Asset>();
+
+      void upsert({
+        viewExternalId: "CogniteAsset",
+        items: [
+          // @ts-expect-error space is required
+          {
+            externalId: "pump-1",
+            name: "Pump 1",
+          },
+        ],
+      });
+
+      void upsert({
+        viewExternalId: "CogniteAsset",
+        items: [
+          {
+            space: "asset-space",
+            externalId: "pump-1",
+            // @ts-expect-error unknown upsert property
+            namme: "Pump 1",
+          },
+        ],
+      });
+
+      void upsert({
+        viewExternalId: "CogniteAsset",
+        items: [
+          {
+            space: "asset-space",
+            externalId: "pump-1",
+            // @ts-expect-error relation fields accept NodeId references, not nested mutations
+            children: [{ space: "asset-space", externalId: "child-1", name: "Child" }],
+          },
+        ],
+      });
+
+      void upsert({
+        viewExternalId: "CogniteAsset",
+        items: [{ space: "asset-space", externalId: "pump-1" }],
+        // @ts-expect-error delete is not part of the public upsert API
+        delete: [{ space: "asset-space", externalId: "old-pump" }],
+      });
+
+      void upsert({
+        viewExternalId: "CogniteAsset",
+        items: [{ space: "asset-space", externalId: "pump-1" }],
+        // @ts-expect-error Cognite apply flags are intentionally not exposed
+        skipOnVersionConflict: false,
+      });
+
+      void upsert({
+        viewExternalId: "CogniteAsset",
+        items: [{ space: "asset-space", externalId: "pump-1" }],
+        // @ts-expect-error edgeMode must be append or replace
+        edgeMode: "merge",
+      });
+
+      void upsert({
+        viewExternalId: "CogniteAsset",
+        items: [{ space: "asset-space", externalId: "pump-1" }],
+        onEdgeCreation: {
+          // @ts-expect-error single NodeId properties do not create edges
+          parent: ({ startNode }) => startNode,
+        },
+      });
+
+      void upsert({
+        viewExternalId: "CogniteAsset",
+        items: [{ space: "asset-space", externalId: "pump-1" }],
+        onEdgeCreation: {
+          // @ts-expect-error edge callbacks are configured per known relation property
+          missingRelation: ({ startNode }) => startNode,
+        },
+      });
+    });
+  });
+
+  it("accepts delete inputs that include node identities", () => {
+    typecheckOnly(() => {
+      const model = null as unknown as IndustrialModelClient;
+      const result = model.delete([
+        { space: "asset-space", externalId: "pump-1" },
+        { space: "asset-space", externalId: "pump-2", name: "Pump 2" },
+      ]);
+
+      expectTypeOf(result).toEqualTypeOf<Promise<DeleteResult>>();
+      expectTypeOf<
+        Awaited<typeof result>["items"][number]["instanceType"]
+      >().toEqualTypeOf<"node">();
+    });
+  });
+
+  it("rejects delete inputs without node identities", () => {
+    typecheckOnly(() => {
+      const model = null as unknown as IndustrialModelClient;
+
+      void model.delete([
+        // @ts-expect-error space is required
+        { externalId: "pump-1" },
+      ]);
+
+      void model.delete([
+        // @ts-expect-error externalId is required
+        { space: "asset-space" },
+      ]);
+
+      // @ts-expect-error explicit delete item type must include NodeId fields
+      void model.delete<{ name: string }>([{ name: "Pump 1" }]);
     });
   });
 });
