@@ -14,9 +14,9 @@ export type SortDirection = "ascending" | "descending";
 
 export type QueryResultMap = Record<string, NodeOrEdge[]>;
 
-export interface IndustrialModelClientOptions {
+export type IndustrialModelClientOptions = {
   validateResults?: boolean;
-}
+};
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
 type Merge<A, B> = Simplify<Omit<A, keyof B> & B>;
@@ -100,17 +100,17 @@ type SortInput<TModel> = {
     : never]?: SortDirection;
 };
 
-export interface QueryOptions<
+export type QueryOptions<
   TModel,
   TSelect extends QuerySelect<TModel> | undefined = QuerySelect<TModel> | undefined,
-> {
+> = {
   viewExternalId: string;
   select?: TSelect;
   filters?: WhereInput<TModel>;
   sort?: SortInput<TModel>;
   limit?: number;
   cursor?: string | null;
-}
+};
 
 export type QueryResultMetadata = Pick<
   NodeDefinition,
@@ -195,10 +195,10 @@ export type QueryResultItem<
       ExplicitSelectionResult<TModel, TSelect, TDepth>
     >;
 
-export interface QueryResult<TItem = Record<string, unknown>> {
+export type QueryResult<TItem = Record<string, unknown>> = {
   items: TItem[];
   cursor: string | null;
-}
+};
 
 export type QueryExecutor<TModel> = {
   <const TSelect extends QuerySelect<TModel>>(
@@ -264,12 +264,12 @@ export type AggregateValue<TDef> = TDef extends { avg: infer P extends PropertyK
             : { property: P; value: number }
           : never;
 
-export interface AggregateOptions<TModel> {
+export type AggregateOptions<TModel> = {
   viewExternalId: string;
   filters?: WhereInput<TModel>;
   groupBy?: AggregateGroupBy<TModel>;
   aggregate?: AggregateDefinition<TModel>;
-}
+};
 
 export type AggregateResultItem<
   TModel,
@@ -280,9 +280,9 @@ export type AggregateResultItem<
   aggregate?: AggregateValue<TAggregate>;
 };
 
-export interface AggregateResult<TItem = Record<string, unknown>> {
+export type AggregateResult<TItem = Record<string, unknown>> = {
   items: TItem[];
-}
+};
 
 export type AggregateExecutor<TModel> = <const TOptions extends AggregateOptions<TModel>>(
   options: TOptions,
@@ -317,11 +317,11 @@ export type UpsertNode<TModel> = Simplify<
   NodeId & Partial<Omit<UpsertProperties<TModel>, keyof NodeId>>
 >;
 
-export interface EdgeCreationContext {
+export type EdgeCreationContext = {
   startNode: NodeId;
   endNode: NodeId;
   edgeType: NodeId;
-}
+};
 
 export type EdgeCreationCallback = (context: EdgeCreationContext) => NodeId;
 export type EdgeCreationCallbacks<TProperty extends string = string> = Partial<
@@ -332,13 +332,13 @@ export type OnEdgeCreation<TModel> = EdgeCreationCallbacks<
 >;
 export type EdgeMode = "append" | "replace";
 
-export interface UpsertOptions<TModel> {
+export type UpsertOptions<TModel> = {
   viewExternalId: string;
   items: UpsertNode<TModel>[];
   onEdgeCreation?: OnEdgeCreation<TModel>;
   replace?: boolean;
   edgeMode?: EdgeMode;
-}
+};
 
 export type UpsertResultItem = {
   instanceType: "node" | "edge";
@@ -350,9 +350,9 @@ export type UpsertResultItem = {
   lastUpdatedTime?: number;
 };
 
-export interface UpsertResult {
+export type UpsertResult = {
   items: UpsertResultItem[];
-}
+};
 
 export type UpsertExecutor<TModel> = (options: UpsertOptions<TModel>) => Promise<UpsertResult>;
 
@@ -360,9 +360,9 @@ export type DeleteResultItem = Omit<UpsertResultItem, "instanceType"> & {
   instanceType: "node";
 };
 
-export interface DeleteResult {
+export type DeleteResult = {
   items: DeleteResultItem[];
-}
+};
 
 export type DeleteExecutor = <TItem extends NodeId>(items: TItem[]) => Promise<DeleteResult>;
 
@@ -380,23 +380,23 @@ export type DatapointAggregate =
   | "continuousVariance"
   | "discreteVariance";
 
-export interface RawDatapoint {
+export type RawDatapoint = {
   timestamp: Date;
   value: number;
-}
+};
 
-export interface DatapointSeriesResult {
+export type DatapointSeriesResult = {
   timeSeries: NodeId;
   unit?: string;
   datapoints: RawDatapoint[];
   cursor: string | null;
-}
+};
 
-export interface DatapointsResult {
+export type DatapointsResult = {
   items: DatapointSeriesResult[];
-}
+};
 
-export interface DatapointsRetrieveOptions {
+export type DatapointsRetrieveOptions = {
   timeSeries: NodeId[];
   start?: Date;
   end?: Date;
@@ -407,46 +407,46 @@ export interface DatapointsRetrieveOptions {
   includeOutsidePoints?: boolean;
   ignoreUnknownIds?: boolean;
   timeZone?: string;
-}
+};
 
-export interface DatapointsLatestSeries extends NodeId {
+export type DatapointsLatestSeries = NodeId & {
   before?: Date;
-}
+};
 
-export interface DatapointsLatestOptions {
+export type DatapointsLatestOptions = {
   timeSeries: DatapointsLatestSeries[];
   ignoreUnknownIds?: boolean;
-}
+};
 
-export interface DatapointsInsertItem {
+export type DatapointsInsertItem = {
   timeSeries: NodeId;
   datapoints: Array<{ timestamp: Date; value: number }>;
-}
+};
 
-export interface DatapointsDeleteRange {
+export type DatapointsDeleteRange = {
   timeSeries: NodeId;
   start: Date;
   end?: Date;
-}
+};
 
-export interface DatapointsExecutor {
+export type DatapointsExecutor = {
   retrieve(options: DatapointsRetrieveOptions): Promise<DatapointsResult>;
   latest(options: DatapointsLatestOptions): Promise<DatapointsResult>;
   insert(items: DatapointsInsertItem[]): Promise<void>;
   delete(ranges: DatapointsDeleteRange[]): Promise<void>;
-}
+};
 
 // ─── Files ────────────────────────────────────────────────────────────────────
 
-export interface FileUploadInfo extends NodeId {
+export type FileUploadInfo = NodeId & {
   name: string;
   mimeType?: string;
   directory?: string;
   source?: string;
   metadata?: Record<string, string>;
-}
+};
 
-export interface FileUploadResult extends NodeId {
+export type FileUploadResult = NodeId & {
   name: string;
   uploaded: boolean;
   mimeType?: string;
@@ -456,16 +456,16 @@ export interface FileUploadResult extends NodeId {
   createdTime: Date;
   lastUpdatedTime: Date;
   uploadUrl?: string;
-}
+};
 
-export interface FileDownloadUrl extends NodeId {
+export type FileDownloadUrl = NodeId & {
   downloadUrl: string;
-}
+};
 
-export interface FilesExecutor {
+export type FilesExecutor = {
   upload(fileInfo: FileUploadInfo, content?: unknown): Promise<FileUploadResult>;
   getDownloadUrls(nodeIds: NodeId[]): Promise<FileDownloadUrl[]>;
-}
+};
 
 export type SearchFilter = { query: string; operator?: "OR" | "AND" };
 
