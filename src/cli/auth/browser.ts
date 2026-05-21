@@ -5,7 +5,7 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { platform, env } from "node:process";
+import { env, platform } from "node:process";
 
 function tryOpen(command: string, args: string[]): Promise<boolean> {
   return new Promise((resolve) => {
@@ -48,7 +48,14 @@ function powershellPath(): string {
 
 function powershellStartArgs(url: string): string[] {
   const encodedCommand = Buffer.from(`Start "${url}"`, "utf16le").toString("base64");
-  return ["-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-EncodedCommand", encodedCommand];
+  return [
+    "-NoProfile",
+    "-NonInteractive",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-EncodedCommand",
+    encodedCommand,
+  ];
 }
 
 export async function openBrowser(url: string): Promise<void> {

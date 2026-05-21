@@ -6,12 +6,12 @@
  * the authorization code for an access token.
  */
 
+import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import https from "node:https";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { execFileSync } from "node:child_process";
 import { openBrowser } from "./browser";
 
 const LOGIN_CONFIG = {
@@ -65,7 +65,10 @@ async function fetchJson(url: string, options?: RequestInit): Promise<Record<str
   }
 
   if (!response.ok) {
-    const message = (data.error_description || data.error || data.message || response.statusText) as string;
+    const message = (data.error_description ||
+      data.error ||
+      data.message ||
+      response.statusText) as string;
     throw new Error(`${url} failed with ${response.status}: ${message}`);
   }
 
@@ -91,12 +94,26 @@ function getOrCreateCertificates(certDir: string): { key: Buffer; cert: Buffer }
   mkdirSync(certDir, { recursive: true });
 
   try {
-    execFileSync("openssl", [
-      "req", "-x509", "-newkey", "rsa:2048", "-nodes", "-sha256",
-      "-subj", "/CN=localhost",
-      "-keyout", keyPath, "-out", certPath,
-      "-days", "365",
-    ], { stdio: ["ignore", "pipe", "ignore"] });
+    execFileSync(
+      "openssl",
+      [
+        "req",
+        "-x509",
+        "-newkey",
+        "rsa:2048",
+        "-nodes",
+        "-sha256",
+        "-subj",
+        "/CN=localhost",
+        "-keyout",
+        keyPath,
+        "-out",
+        certPath,
+        "-days",
+        "365",
+      ],
+      { stdio: ["ignore", "pipe", "ignore"] },
+    );
   } catch {
     throw new Error("Failed to generate self-signed certificate. Install OpenSSL and retry.");
   }
@@ -162,8 +179,9 @@ async function exchangeCodeForTokens(
 // --- Callback HTML ---
 
 function escapeHtml(value: string): string {
-  return value.replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c] ?? c),
+  return value.replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c,
   );
 }
 
@@ -231,7 +249,9 @@ function startCallbackServer(
       try {
         const tokens = await exchangeCodeForTokens(discovery, code, verifier);
         res.writeHead(200, { "Content-Type": "text/html" });
-        res.end(callbackHtml("Login successful", "You can close this window and return to the terminal."));
+        res.end(
+          callbackHtml("Login successful", "You can close this window and return to the terminal."),
+        );
         clearTimeout(timeout);
         server.close();
 
@@ -260,7 +280,9 @@ function startCallbackServer(
     });
 
     server.listen(LOGIN_CONFIG.port, "127.0.0.1", () => {
-      process.stderr.write(`Local HTTPS server listening on https://localhost:${LOGIN_CONFIG.port}\n`);
+      process.stderr.write(
+        `Local HTTPS server listening on https://localhost:${LOGIN_CONFIG.port}\n`,
+      );
     });
   });
 }
@@ -285,7 +307,9 @@ export async function browserLogin(options?: LoginOptions): Promise<string> {
   try {
     await openBrowser(authUrl);
   } catch {
-    process.stderr.write(`Could not open browser automatically.\nOpen this URL manually:\n${authUrl}\n`);
+    process.stderr.write(
+      `Could not open browser automatically.\nOpen this URL manually:\n${authUrl}\n`,
+    );
   }
 
   return startCallbackServer(tlsOptions, discovery, verifier, state);

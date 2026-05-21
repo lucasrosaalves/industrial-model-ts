@@ -4,19 +4,22 @@
 
 import type {
   ViewDefinition as CogniteViewDefinition,
-  ViewDefinitionProperty,
-  ViewPropertyDefinition,
-  ReverseDirectRelationConnection,
   EdgeConnection,
+  ReverseDirectRelationConnection,
+  ViewPropertyDefinition,
 } from "../../cognite";
+import {
+  getDirectRelationSource,
+  isEdgeConnection,
+  isReverseDirectRelation,
+  isViewPropertyDefinition,
+} from "../../utils";
 import { reservedWords, typeMappings } from "./constants";
 import { toCamel, toPascal } from "./helpers";
 import type { FieldDefinition, ViewDefinition } from "./models";
 
 export function parseViews(views: CogniteViewDefinition[]): ViewDefinition[] {
-  return views
-    .sort((a, b) => a.externalId.localeCompare(b.externalId))
-    .map(parseView);
+  return views.sort((a, b) => a.externalId.localeCompare(b.externalId)).map(parseView);
 }
 
 function parseView(view: CogniteViewDefinition): ViewDefinition {
@@ -55,15 +58,16 @@ function processMappedProperty(
   const mappedType = typeMappings[cogniteType] ?? "unknown";
   const isList = prop.type.list === true;
   const isRelation = cogniteType === "direct";
+  const relationSource = getDirectRelationSource(prop);
 
   let relationTarget: string | null = null;
   let relationTargetSpace: string | null = null;
   let relationTargetExternalId: string | null = null;
 
-  if (isRelation && prop.type.source) {
-    relationTarget = toPascal(prop.type.source.externalId);
-    relationTargetSpace = prop.type.source.space;
-    relationTargetExternalId = prop.type.source.externalId;
+  if (relationSource) {
+    relationTarget = toPascal(relationSource.externalId);
+    relationTargetSpace = relationSource.space;
+    relationTargetExternalId = relationSource.externalId;
   }
 
   return {
@@ -127,18 +131,4 @@ function processReverseProperty(
     relationTargetSpace: prop.source.space,
     relationTargetExternalId: prop.source.externalId,
   };
-}
-
-// --- Type guards ---
-
-function isViewPropertyDefinition(prop: ViewDefinitionProperty): prop is ViewPropertyDefinition {
-  return "containerPropertyIdentifier" in prop;
-}
-
-function isEdgeConnection(prop: ViewDefinitionProperty): prop is EdgeConnection {
-  return "direction" in prop;
-}
-
-function isReverseDirectRelation(prop: ViewDefinitionProperty): prop is ReverseDirectRelationConnection {
-  return "through" in prop;
 }

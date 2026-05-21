@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { renderModels } from "../../src/cli/generator/templates/models";
-import { renderClient } from "../../src/cli/generator/templates/client";
-import { renderIndex } from "../../src/cli/generator/templates/index";
 import type { ViewDefinition } from "../../src/cli/generator/models";
 import type { GeneratorConfig } from "../../src/cli/generator/renderer";
+import { renderClient } from "../../src/cli/generator/templates/client";
+import { renderIndex } from "../../src/cli/generator/templates/index";
+import { renderModels } from "../../src/cli/generator/templates/models";
 
 const mockViews: ViewDefinition[] = [
   {
@@ -154,7 +154,7 @@ describe("renderModels", () => {
 
     expect(output).toContain("// Data model: target_space/MyDataModel v1");
     expect(output).toContain("// industrial-model v0.2.0");
-    expect(output).toContain("import type { IndustrialModel, NodeId } from 'industrial-model'");
+    expect(output).toContain('import type { IndustrialModel, NodeId } from "industrial-model";');
     expect(output).toContain("export type Equipment = IndustrialModel<{");
     expect(output).toContain("export type User = IndustrialModel<");
     expect(output).toContain("export type Role = IndustrialModel<");
@@ -200,7 +200,9 @@ describe("renderClient", () => {
   it("generates client function with correct name", () => {
     const output = renderClient(mockViews, mockConfig);
 
-    expect(output).toContain("export function createMyDataModelClient(cogniteClient: CogniteClient)");
+    expect(output).toContain(
+      "export function createMyDataModelClient(cogniteClient: CogniteClient)",
+    );
   });
 
   it("includes IndustrialModelClient instantiation with data model id", () => {
@@ -241,7 +243,7 @@ describe("renderIndex", () => {
   it("re-exports models and client", () => {
     const output = renderIndex(mockConfig);
 
-    expect(output).toContain("export * from './models'");
-    expect(output).toContain("export { createMyDataModelClient } from './client'");
+    expect(output).toContain('export * from "./models";');
+    expect(output).toContain('export { createMyDataModelClient } from "./client";');
   });
 });

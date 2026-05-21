@@ -2,12 +2,14 @@
  * `industrial-model generate` command.
  */
 
-import { Command } from "commander";
 import { CogniteClient } from "@cognite/sdk";
+import { Command } from "commander";
+import { createCogniteAdapter } from "../../cognite";
+import { ViewMapper } from "../../mappers/view-mapper";
+import { createGeneratorConfig, generate } from "../generator/renderer";
 import { promptAuth } from "../prompts/auth";
 import { promptDataModel } from "../prompts/data-model";
 import { promptOptions } from "../prompts/options";
-import { createGeneratorConfig, generate } from "../generator/renderer";
 
 export const generateCommand = new Command("generate")
   .description("Generate TypeScript types and client from a Cognite data model")
@@ -47,22 +49,21 @@ export const generateCommand = new Command("generate")
       packageVersion: process.env.PACKAGE_VERSION ?? "unknown",
     });
 
-    console.log(`\nGenerating types for ${dataModel.space}/${dataModel.externalId}/${dataModel.version}...`);
+    console.log(
+      `\nGenerating types for ${dataModel.space}/${dataModel.externalId}/${dataModel.version}...`,
+    );
 
-    const response = await client.dataModels.retrieve(
-      [{ space: dataModel.space, externalId: dataModel.externalId, version: dataModel.version }],
-      { inlineViews: true },
-    );
-    const views = (response.items[0]?.views ?? []).filter(
-      (v): v is typeof v & { properties: Record<string, unknown> } => "properties" in v,
-    );
+    const viewMapper = new ViewMapper(createCogniteAdapter(client), dataModel);
+    const views = await viewMapper.getViews();
 
     if (views.length === 0) {
       console.error("No views found in the data model.");
       process.exit(1);
     }
 
-    generate(views as Parameters<typeof generate>[0], config);
+    generate(views, config);
 
-    console.log(`\n✓ Generated ${views.length} view(s) to ${config.outputPath}/${config.dataModelId}/`);
+    console.log(
+      `\n✓ Generated ${views.length} view(s) to ${config.outputPath}/${config.dataModelId}/`,
+    );
   });

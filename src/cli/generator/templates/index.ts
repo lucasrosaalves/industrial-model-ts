@@ -8,7 +8,7 @@ import { renderHeader } from "./header";
 export function renderIndex(config: GeneratorConfig): string {
   return `${renderHeader(config)}
 
-export * from './models'
-export { ${config.clientFunctionName} } from './client'
+export * from "./models";
+export { ${config.clientFunctionName} } from "./client";
 `;
 }

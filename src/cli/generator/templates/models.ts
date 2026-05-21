@@ -3,7 +3,12 @@
  */
 
 import type { ViewDefinition } from "../models";
-import { getInterfaceType, getPropsFields, getRelationResolvedType, getRelationTypeFields } from "../models";
+import {
+  getInterfaceType,
+  getPropsFields,
+  getRelationResolvedType,
+  getRelationTypeFields,
+} from "../models";
 import type { GeneratorConfig } from "../renderer";
 import { renderHeader } from "./header";
 
@@ -11,7 +16,7 @@ export function renderModels(views: ViewDefinition[], config: GeneratorConfig): 
   const lines: string[] = [
     renderHeader(config),
     "",
-    "import type { IndustrialModel, NodeId } from 'industrial-model'",
+    'import type { IndustrialModel, NodeId } from "industrial-model";',
   ];
 
   for (const view of views) {
@@ -26,18 +31,21 @@ function renderView(view: ViewDefinition): string {
   const propsFields = getPropsFields(view);
   const relationFields = getRelationTypeFields(view);
 
-  const propsLines = propsFields.map(
-    (f) => `    ${f.fieldName}${f.isNullable ? "?" : ""}: ${getInterfaceType(f)}`,
-  );
-
   if (relationFields.length === 0) {
+    const propsLines = propsFields.map(
+      (f) => `  ${f.fieldName}${f.isNullable ? "?" : ""}: ${getInterfaceType(f)};`,
+    );
+
     return `export type ${view.viewName} = IndustrialModel<{
 ${propsLines.join("\n")}
-}>`;
+}>;`;
   }
 
+  const propsLines = propsFields.map(
+    (f) => `    ${f.fieldName}${f.isNullable ? "?" : ""}: ${getInterfaceType(f)};`,
+  );
   const relLines = relationFields.map(
-    (f) => `    ${f.fieldName}${f.isNullable ? "?" : ""}: ${getRelationResolvedType(f)}`,
+    (f) => `    ${f.fieldName}${f.isNullable ? "?" : ""}: ${getRelationResolvedType(f)};`,
   );
 
   return `export type ${view.viewName} = IndustrialModel<
@@ -47,5 +55,5 @@ ${propsLines.join("\n")}
   {
 ${relLines.join("\n")}
   }
->`;
+>;`;
 }

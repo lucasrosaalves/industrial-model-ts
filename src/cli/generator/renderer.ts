@@ -5,12 +5,12 @@
 import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ViewDefinition as CogniteViewDefinition } from "../../cognite";
+import { toPascal } from "./helpers";
 import type { ViewDefinition } from "./models";
 import { parseViews } from "./parser";
 import { renderClient } from "./templates/client";
 import { renderIndex } from "./templates/index";
 import { renderModels } from "./templates/models";
-import { toPascal } from "./helpers";
 
 export interface GeneratorConfig {
   dataModelSpace: string;

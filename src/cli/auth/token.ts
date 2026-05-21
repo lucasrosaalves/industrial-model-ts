@@ -10,11 +10,10 @@ export interface TokenClaims {
 }
 
 export function decodeTokenClaims(token: string): TokenClaims {
-  const parts = token.split(".");
-  if (parts.length !== 3) return {};
+  const [header, payload, signature] = token.split(".");
+  if (!header || !payload || !signature) return {};
 
   try {
-    const payload = parts[1]!;
     const json = Buffer.from(payload, "base64url").toString("utf8");
     return JSON.parse(json) as TokenClaims;
   } catch {

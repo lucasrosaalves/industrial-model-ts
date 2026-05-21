@@ -2,8 +2,8 @@
  * Data model selection prompts.
  */
 
-import { search } from "@inquirer/prompts";
 import type { CogniteClient } from "@cognite/sdk";
+import { search } from "@inquirer/prompts";
 
 export interface DataModelChoice {
   space: string;
@@ -19,16 +19,18 @@ export async function promptDataModel(
     return parseDataModelFlag(flag);
   }
 
-  const dataModels = await client.dataModels.list({ limit: 1000 });
+  const dataModels = await client.dataModels.list({ limit: 1000, includeGlobal: true });
 
-  const choices = dataModels.items.map((dm: { space: string; externalId: string; version: string }) => ({
-    name: `${dm.space}/${dm.externalId}/${dm.version}`,
-    value: {
-      space: dm.space,
-      externalId: dm.externalId,
-      version: String(dm.version),
-    },
-  }));
+  const choices = dataModels.items.map(
+    (dm: { space: string; externalId: string; version: string }) => ({
+      name: `${dm.space}/${dm.externalId}/${dm.version}`,
+      value: {
+        space: dm.space,
+        externalId: dm.externalId,
+        version: String(dm.version),
+      },
+    }),
+  );
 
   return search({
     message: "Select a data model:",

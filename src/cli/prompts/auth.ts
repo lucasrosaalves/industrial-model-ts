@@ -18,8 +18,6 @@ export async function promptAuth(flags: AuthOptions): Promise<{
   baseUrl: string;
 }> {
   let token: string;
-  let inferredProject: string | undefined;
-  let inferredBaseUrl: string | undefined;
 
   if (flags.token) {
     token = flags.token;
@@ -44,21 +42,19 @@ export async function promptAuth(flags: AuthOptions): Promise<{
 
   // Try to extract project and base URL from JWT claims
   const extracted = extractAuthFromToken(token);
-  inferredProject = extracted.project;
-  inferredBaseUrl = extracted.baseUrl;
 
   const project =
     flags.project ||
     (await input({
       message: "CDF project name:",
-      ...(inferredProject ? { default: inferredProject } : {}),
+      ...(extracted.project ? { default: extracted.project } : {}),
     }));
 
   const baseUrl =
     flags.baseUrl ||
     (await input({
       message: "CDF base URL:",
-      default: inferredBaseUrl || "https://az-eastus-1.cognitedata.com",
+      default: extracted.baseUrl || "https://az-eastus-1.cognitedata.com",
     }));
 
   return { token, project, baseUrl };
