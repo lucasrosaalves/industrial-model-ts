@@ -4,7 +4,7 @@ import pkg from "./package.json";
 export default defineConfig([
   // Runtime library (consumer-facing)
   {
-    entry: ["src/index.ts"],
+    entry: ["src/index.ts", "src/cognite-core/index.ts"],
     outDir: "dist",
     format: ["cjs", "esm"],
     dts: true,
