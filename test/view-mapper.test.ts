@@ -59,6 +59,12 @@ describe("ViewMapper", () => {
       searchInstances: vi.fn(),
       aggregateInstances: vi.fn(),
       applyInstances: vi.fn(),
+      retrieveDatapoints: vi.fn(),
+      retrieveLatestDatapoints: vi.fn(),
+      insertDatapoints: vi.fn(),
+      deleteDatapoints: vi.fn(),
+      getFileDownloadUrls: vi.fn(),
+      uploadFile: vi.fn(),
     };
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     await expect(mapper.getViews()).rejects.toThrow("not found");
@@ -136,6 +142,12 @@ describe("ViewMapper", () => {
       searchInstances: vi.fn(),
       aggregateInstances: vi.fn(),
       applyInstances: vi.fn(),
+      retrieveDatapoints: vi.fn(),
+      retrieveLatestDatapoints: vi.fn(),
+      insertDatapoints: vi.fn(),
+      deleteDatapoints: vi.fn(),
+      uploadFile: vi.fn(),
+      getFileDownloadUrls: vi.fn(),
     };
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     const views = await mapper.getViews();
