@@ -10,7 +10,7 @@ import type { ViewDefinition } from "./models";
 import { parseViews } from "./parser";
 import { renderClient } from "./templates/client";
 import { renderIndex } from "./templates/index";
-import { renderModels } from "./templates/models";
+import { renderTypes } from "./templates/types";
 
 export interface GeneratorConfig {
   dataModelSpace: string;
@@ -60,7 +60,7 @@ export function generateFromDefinitions(
   }
   mkdirSync(outputDir, { recursive: true });
 
-  writeFileSync(join(outputDir, "models.ts"), renderModels(viewDefinitions, config));
+  writeFileSync(join(outputDir, "types.ts"), renderTypes(viewDefinitions, config));
   writeFileSync(join(outputDir, "client.ts"), renderClient(viewDefinitions, config));
   writeFileSync(join(outputDir, "index.ts"), renderIndex(config));
 }

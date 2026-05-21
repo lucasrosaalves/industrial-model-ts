@@ -8,8 +8,8 @@ For a data model with views `Equipment` and `Facility`, the CLI produces:
 
 ```
 generated/MyDataModel/
-├── models.ts    # IndustrialModel<Props, Relations> type aliases per view
-├── client.ts    # createMyDataModelClient() factory with typed query methods
+├── types.ts     # IndustrialModel<Props, Relations> type aliases and executors
+├── client.ts    # MyDataModelClient class and createMyDataModelClient() shortcuts
 └── index.ts     # Re-exports
 ```
 
@@ -53,7 +53,7 @@ When flags are omitted and no token is provided, the CLI falls back to interacti
 
 ## Example generated code
 
-### models.ts
+### types.ts
 
 ```ts
 /* eslint-disable */
@@ -62,20 +62,22 @@ When flags are omitted and no token is provided, the CLI falls back to interacti
 // Generated at: 2026-05-19T12:00:00.000Z
 // industrial-model v0.2.0
 
-import type { IndustrialModel, NodeId } from 'industrial-model'
+import type { IndustrialModel, NodeId } from "industrial-model";
+
+export type MyDataModelViewExternalId = "Equipment" | "Facility";
 
 export type Equipment = IndustrialModel<{
-    name: string
-    temperature?: number
-    facility?: NodeId
+  name: string;
+  temperature?: number;
+  facility?: NodeId;
 }, {
-    facility?: Facility
-}>
+  facility?: Facility;
+}>;
 
 export type Facility = IndustrialModel<{
-    name: string
-    location: string
-}>
+  name: string;
+  location: string;
+}>;
 ```
 
 ### client.ts
@@ -87,26 +89,48 @@ export type Facility = IndustrialModel<{
 // Generated at: 2026-05-19T12:00:00.000Z
 // industrial-model v0.2.0
 
-import type { CogniteClient } from '@cognite/sdk'
-import { IndustrialModelClient, type QueryOptions, type QuerySelect } from 'industrial-model'
-import type { Equipment, Facility } from './models'
+import type { CogniteClient } from "@cognite/sdk";
+import { IndustrialModelClient, type DataModelId } from "industrial-model";
+import type { MyDataModelQueryExecutor, MyDataModelViewExternalId } from "./types";
+
+export const DATA_MODEL = {
+  space: "my-space",
+  externalId: "MyDataModel",
+  version: "1",
+} satisfies DataModelId;
+
+export class MyDataModelClient {
+  private readonly model: IndustrialModelClient;
+
+  constructor(cogniteClient: CogniteClient) {
+    this.model = new IndustrialModelClient(cogniteClient, DATA_MODEL);
+  }
+
+  query<TView extends MyDataModelViewExternalId>(
+    viewExternalId: TView,
+  ): MyDataModelQueryExecutor<TView> {
+    // implementation omitted
+  }
+}
 
 export function createMyDataModelClient(cogniteClient: CogniteClient) {
-  const model = new IndustrialModelClient(cogniteClient, {
-    space: "my-space",
-    externalId: "MyDataModel",
-    version: "1",
-  })
+  const model = new MyDataModelClient(cogniteClient);
 
   return {
     model,
-    equipment: <const TSelect extends QuerySelect<Equipment> | undefined = undefined>(
-      options?: Omit<QueryOptions<Equipment, TSelect>, 'viewExternalId'>
-    ) => model.query<Equipment>()({ viewExternalId: "Equipment", ...options }),
-    facility: <const TSelect extends QuerySelect<Facility> | undefined = undefined>(
-      options?: Omit<QueryOptions<Facility, TSelect>, 'viewExternalId'>
-    ) => model.query<Facility>()({ viewExternalId: "Facility", ...options }),
-  }
+    equipment: {
+      query: model.query("Equipment"),
+      aggregate: model.aggregate("Equipment"),
+      upsert: model.upsert("Equipment"),
+      delete: (items) => model.delete(items),
+    },
+    facility: {
+      query: model.query("Facility"),
+      aggregate: model.aggregate("Facility"),
+      upsert: model.upsert("Facility"),
+      delete: (items) => model.delete(items),
+    }
+  };
 }
 ```
 
@@ -120,13 +144,13 @@ const cognite = new CogniteClient({
   appId: 'my-app',
   project: 'my-project',
   baseUrl: 'https://az-eastus-1.cognitedata.com',
-  getToken: () => getAccessToken(),
+  oidcTokenProvider: () => getAccessToken(),
 })
 
 const client = createMyDataModelClient(cognite)
 
 // Type-safe query with autocomplete on select, filters, and sort
-const { items } = await client.equipment({
+const { items } = await client.equipment.query({
   select: { name: true, facility: { name: true } },
   filters: { name: { prefix: "Pump" } },
   sort: { name: "ascending" },

@@ -41,6 +41,7 @@
     "includes": [
       "**",
       "!**/dist",
+      "!**/generated",
       "!**/coverage",
       "!**/node_modules",
       "!**/test/fixtures/cognite-core-data-model.json",

@@ -3,7 +3,7 @@ import type { ViewDefinition } from "../../src/cli/generator/models";
 import type { GeneratorConfig } from "../../src/cli/generator/renderer";
 import { renderClient } from "../../src/cli/generator/templates/client";
 import { renderIndex } from "../../src/cli/generator/templates/index";
-import { renderModels } from "../../src/cli/generator/templates/models";
+import { renderTypes } from "../../src/cli/generator/templates/types";
 
 const mockViews: ViewDefinition[] = [
   {
@@ -148,102 +148,107 @@ const mockConfig: GeneratorConfig = {
   generatedAt: "2026-01-01T00:00:00.000Z",
 };
 
-describe("renderModels", () => {
+describe("renderTypes", () => {
   it("generates IndustrialModel type aliases", () => {
-    const output = renderModels(mockViews, mockConfig);
+    const output = renderTypes(mockViews, mockConfig);
 
     expect(output).toContain("// Data model: target_space/MyDataModel v1");
     expect(output).toContain("// industrial-model v0.2.0");
-    expect(output).toContain('import type { IndustrialModel, NodeId } from "industrial-model";');
+    expect(output).toContain("IndustrialModel,");
+    expect(output).toContain('} from "industrial-model";');
     expect(output).toContain("export type Equipment = IndustrialModel<{");
     expect(output).toContain("export type User = IndustrialModel<");
     expect(output).toContain("export type Role = IndustrialModel<");
   });
 
-  it("generates props fields correctly", () => {
-    const output = renderModels(mockViews, mockConfig);
+  it("generates props and relation fields correctly", () => {
+    const output = renderTypes(mockViews, mockConfig);
 
     expect(output).toContain("name: string");
     expect(output).toContain("temperature?: number");
     expect(output).toContain("role?: NodeId");
     expect(output).toContain("tags: string[]");
-  });
-
-  it("generates relations type param for views with relations", () => {
-    const output = renderModels(mockViews, mockConfig);
-
     expect(output).toContain("role?: Role");
     expect(output).toContain("users: User[]");
   });
 
-  it("excludes reverse relations from props", () => {
-    const output = renderModels(mockViews, mockConfig);
+  it("generates view union, model map, and executor aliases", () => {
+    const output = renderTypes(mockViews, mockConfig);
 
-    // Role's "users" reverse relation should NOT appear in props
-    // It should only appear in relations
-    const roleSection = output.split("export type Role")[1];
-    // The props section shouldn't have "users" with NodeId[]
-    expect(roleSection).not.toContain("users: NodeId[]");
+    expect(output).toContain("export type MyDataModelViewExternalId =");
+    expect(output).toContain('| "Equipment"');
+    expect(output).toContain('| "User"');
+    expect(output).toContain('  "Equipment": Equipment;');
+    expect(output).toContain("export interface MyDataModelModelByView");
+    expect(output).toContain(
+      "export type MyDataModelModel<TView extends MyDataModelViewExternalId>",
+    );
+    expect(output).toContain("export type MyDataModelQueryExecutor");
+    expect(output).toContain("export type MyDataModelAggregateExecutor");
+    expect(output).toContain("export type MyDataModelUpsertExecutor");
   });
 
-  it("does not contain old patterns", () => {
-    const output = renderModels(mockViews, mockConfig);
+  it("excludes reverse relations from props", () => {
+    const output = renderTypes(mockViews, mockConfig);
+    const roleSection = output.split("export type Role")[1];
 
-    expect(output).not.toContain("interface");
-    expect(output).not.toContain("WhereInput");
-    expect(output).not.toContain("SelectPayload");
-    expect(output).not.toContain("SortDirection");
+    expect(roleSection).not.toContain("users: NodeId[]");
   });
 });
 
 describe("renderClient", () => {
-  it("generates client function with correct name", () => {
+  it("generates DATA_MODEL and the core-like client class", () => {
     const output = renderClient(mockViews, mockConfig);
 
-    expect(output).toContain(
-      "export function createMyDataModelClient(cogniteClient: CogniteClient)",
-    );
-  });
-
-  it("includes IndustrialModelClient instantiation with data model id", () => {
-    const output = renderClient(mockViews, mockConfig);
-
+    expect(output).toContain("export const DATA_MODEL = {");
     expect(output).toContain('space: "target_space"');
     expect(output).toContain('externalId: "MyDataModel"');
     expect(output).toContain('version: "1"');
+    expect(output).toContain("export class MyDataModelClient");
+    expect(output).toContain("query<TView extends MyDataModelViewExternalId>");
+    expect(output).toContain("aggregate<TView extends MyDataModelViewExternalId>");
+    expect(output).toContain("upsert<TView extends MyDataModelViewExternalId>");
+    expect(output).toContain("delete<TItem extends NodeId>");
   });
 
-  it("generates query methods for each view", () => {
+  it("imports generated types and runtime APIs from the right modules", () => {
     const output = renderClient(mockViews, mockConfig);
 
-    expect(output).toContain('viewExternalId: "Equipment"');
-    expect(output).toContain('viewExternalId: "User"');
-    expect(output).toContain('viewExternalId: "Role"');
-    expect(output).toContain("QuerySelect<Equipment>");
-    expect(output).toContain("QuerySelect<User>");
-    expect(output).toContain("QuerySelect<Role>");
+    expect(output).toContain('from "industrial-model";');
+    expect(output).toContain('} from "./types";');
+    expect(output).not.toContain('from "../');
+    expect(output).not.toContain('from "./models"');
   });
 
-  it("exports the model instance", () => {
-    const output = renderClient(mockViews, mockConfig);
-    expect(output).toContain("model,");
-  });
-
-  it("uses correct imports", () => {
+  it("generates a factory with per-view operation shortcuts backed by the generated client", () => {
     const output = renderClient(mockViews, mockConfig);
 
-    expect(output).toContain("IndustrialModelClient");
-    expect(output).toContain("QueryOptions");
-    expect(output).toContain("QuerySelect");
-    expect(output).toContain("CogniteClient");
+    expect(output).toContain(
+      "export function createMyDataModelClient(\n  cogniteClient: CogniteClient,",
+    );
+    expect(output).toContain("const model = new MyDataModelClient(cogniteClient, options);");
+    expect(output).toContain("equipment: {");
+    expect(output).toContain('query: model.query("Equipment")');
+    expect(output).toContain('aggregate: model.aggregate("Equipment")');
+    expect(output).toContain('upsert: model.upsert("Equipment")');
+    expect(output).toContain("user: {");
+    expect(output).toContain('query: model.query("User")');
+    expect(output).toContain("role: {");
+    expect(output).toContain('aggregate: model.aggregate("Role")');
+    expect(output).toContain(
+      "delete: <TItem extends NodeId>(items: TItem[]) => model.delete(items)",
+    );
   });
 });
 
 describe("renderIndex", () => {
-  it("re-exports models and client", () => {
+  it("exports client, factory, data model id, and generated types", () => {
     const output = renderIndex(mockConfig);
 
-    expect(output).toContain('export * from "./models";');
-    expect(output).toContain('export { createMyDataModelClient } from "./client";');
+    expect(output).toContain(
+      'export { DATA_MODEL, MyDataModelClient, createMyDataModelClient } from "./client";',
+    );
+    expect(output).toContain('export type * from "./types";');
+    expect(output).not.toContain("./models");
   });
 });

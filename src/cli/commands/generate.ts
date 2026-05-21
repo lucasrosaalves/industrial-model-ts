@@ -30,7 +30,7 @@ export const generateCommand = new Command("generate")
       appId: "industrial-model-generator",
       project: auth.project,
       baseUrl: auth.baseUrl,
-      getToken: () => Promise.resolve(auth.token),
+      oidcTokenProvider: () => Promise.resolve(auth.token),
     });
 
     const dataModel = await promptDataModel(client, flags.dataModel);
