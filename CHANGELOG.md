@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.8.0
+
+### Minor Changes
+
+- c739ee4: add support for datapoints and files in IndustrialModelClient
+
 ## 0.7.0
 
 ### Minor Changes
