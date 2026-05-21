@@ -1,0 +1,63 @@
+/**
+ * Constants for TypeScript code generation.
+ */
+
+/** Cognite property type → TypeScript type */
+export const typeMappings: Record<string, string> = {
+  text: "string",
+  boolean: "boolean",
+  timestamp: "string",
+  date: "string",
+  json: "unknown",
+  float32: "number",
+  float64: "number",
+  int32: "number",
+  int64: "number",
+  timeseries: "string",
+  file: "string",
+  sequence: "string",
+  direct: "NodeId",
+  enum: "string",
+};
+
+/** TypeScript reserved words that need escaping with trailing underscore */
+export const reservedWords = new Set([
+  "break",
+  "case",
+  "catch",
+  "class",
+  "const",
+  "continue",
+  "debugger",
+  "default",
+  "delete",
+  "do",
+  "else",
+  "enum",
+  "export",
+  "extends",
+  "false",
+  "finally",
+  "for",
+  "function",
+  "if",
+  "import",
+  "in",
+  "instanceof",
+  "new",
+  "null",
+  "return",
+  "super",
+  "switch",
+  "this",
+  "throw",
+  "true",
+  "try",
+  "typeof",
+  "undefined",
+  "var",
+  "void",
+  "while",
+  "with",
+  "yield",
+]);

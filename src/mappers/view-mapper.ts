@@ -20,6 +20,11 @@ export class ViewMapper {
     return view;
   }
 
+  async getViews(): Promise<ViewDefinition[]> {
+    const views = await this.loadViews();
+    return Array.from(views.values());
+  }
+
   private loadViews(): Promise<Map<string, ViewDefinition>> {
     if (this.cachePromise == null) {
       this.cachePromise = this.fetchViews();

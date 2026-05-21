@@ -1,5 +1,6 @@
 export { IndustrialModelClient } from "./client";
 export type {
+  AggregateOptions,
   AggregateResult,
   AggregateResultItem,
   DataModelId,
@@ -29,6 +30,7 @@ export type {
   ModelRelations,
   NodeId,
   OnEdgeCreation,
+  QueryOptions,
   QueryResult,
   QueryResultItem,
   QuerySelect,
