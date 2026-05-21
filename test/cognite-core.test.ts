@@ -247,6 +247,34 @@ describe("Cognite Core module", () => {
     });
   });
 
+  it("exposes a datapoints executor that delegates retrieve to the underlying Cognite client", async () => {
+    const client = makeCogniteClientMock({
+      datapointsRetrieveResponse: [
+        {
+          instanceId: { space: "ts-space", externalId: "temperature" },
+          isString: false,
+          datapoints: [{ timestamp: new Date("2024-06-01T00:00:00.000Z"), value: 21 }],
+        },
+      ],
+    });
+    const core = new CogniteCoreClient(client);
+
+    const result = await core.datapoints.retrieve({
+      timeSeries: [{ space: "ts-space", externalId: "temperature" }],
+    });
+
+    expect(client.datapoints.retrieve).toHaveBeenCalledWith(
+      expect.objectContaining({
+        items: [{ instanceId: { space: "ts-space", externalId: "temperature" } }],
+      }),
+    );
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]).toMatchObject({
+      timeSeries: { space: "ts-space", externalId: "temperature" },
+      datapoints: [{ timestamp: new Date("2024-06-01T00:00:00.000Z"), value: 21 }],
+    });
+  });
+
   it("aggregates Cognite Core views without requiring a viewExternalId option", async () => {
     const client = makeCogniteClientMock({
       aggregateResponse: makeCogniteAssetAggregateByNameResponse(),

@@ -3,6 +3,7 @@ import { IndustrialModelClient } from "../client";
 import type {
   AggregateOptions,
   DataModelId,
+  DatapointsExecutor,
   DeleteResult,
   IndustrialModelClientOptions,
   NodeId,
@@ -67,5 +68,9 @@ export class CogniteCoreClient {
 
   delete<TItem extends NodeId>(items: TItem[]): Promise<DeleteResult> {
     return this.model.delete(items);
+  }
+
+  get datapoints(): DatapointsExecutor {
+    return this.model.datapoints;
   }
 }
