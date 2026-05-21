@@ -366,6 +366,107 @@ export interface DeleteResult {
 
 export type DeleteExecutor = <TItem extends NodeId>(items: TItem[]) => Promise<DeleteResult>;
 
+// ─── Datapoints ──────────────────────────────────────────────────────────────
+
+export type DatapointAggregate =
+  | "average"
+  | "max"
+  | "min"
+  | "count"
+  | "sum"
+  | "interpolation"
+  | "stepInterpolation"
+  | "totalVariation"
+  | "continuousVariance"
+  | "discreteVariance";
+
+export interface RawDatapoint {
+  timestamp: Date;
+  value: number;
+}
+
+export interface DatapointSeriesResult {
+  timeSeries: NodeId;
+  unit?: string;
+  datapoints: RawDatapoint[];
+  cursor: string | null;
+}
+
+export interface DatapointsResult {
+  items: DatapointSeriesResult[];
+}
+
+export interface DatapointsRetrieveOptions {
+  timeSeries: NodeId[];
+  start?: Date;
+  end?: Date;
+  /** Number of datapoints to return per time series, or -1 to auto-paginate all pages. */
+  limit?: number;
+  aggregate?: DatapointAggregate;
+  granularity?: string;
+  includeOutsidePoints?: boolean;
+  ignoreUnknownIds?: boolean;
+  timeZone?: string;
+}
+
+export interface DatapointsLatestSeries extends NodeId {
+  before?: Date;
+}
+
+export interface DatapointsLatestOptions {
+  timeSeries: DatapointsLatestSeries[];
+  ignoreUnknownIds?: boolean;
+}
+
+export interface DatapointsInsertItem {
+  timeSeries: NodeId;
+  datapoints: Array<{ timestamp: Date; value: number }>;
+}
+
+export interface DatapointsDeleteRange {
+  timeSeries: NodeId;
+  start: Date;
+  end?: Date;
+}
+
+export interface DatapointsExecutor {
+  retrieve(options: DatapointsRetrieveOptions): Promise<DatapointsResult>;
+  latest(options: DatapointsLatestOptions): Promise<DatapointsResult>;
+  insert(items: DatapointsInsertItem[]): Promise<void>;
+  delete(ranges: DatapointsDeleteRange[]): Promise<void>;
+}
+
+// ─── Files ────────────────────────────────────────────────────────────────────
+
+export interface FileUploadInfo extends NodeId {
+  name: string;
+  mimeType?: string;
+  directory?: string;
+  source?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface FileUploadResult extends NodeId {
+  name: string;
+  uploaded: boolean;
+  mimeType?: string;
+  directory?: string;
+  source?: string;
+  uploadedTime?: Date;
+  createdTime: Date;
+  lastUpdatedTime: Date;
+  uploadUrl?: string;
+}
+
+export interface FileDownloadUrl extends NodeId {
+  downloadUrl: string;
+}
+
+export interface FilesExecutor {
+  upload(fileInfo: FileUploadInfo, content?: unknown): Promise<FileUploadResult>;
+  getDownloadUrls(nodeIds: NodeId[]): Promise<FileDownloadUrl[]>;
+}
+
 export type SearchFilter = { query: string; operator?: "OR" | "AND" };
 
 export type StringFilters = {

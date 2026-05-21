@@ -1,7 +1,10 @@
 import { describe, expectTypeOf, it } from "vitest";
 import type { CogniteCoreClient, CogniteCoreModel } from "../src/cognite-core/index.js";
 import type {
+  DatapointsResult,
   DeleteResult,
+  FileDownloadUrl,
+  FileUploadResult,
   IndustrialModel,
   IndustrialModelClient,
   NodeId,
@@ -437,6 +440,128 @@ describe("public type contracts", () => {
 
       // @ts-expect-error explicit delete item type must include NodeId fields
       void model.delete<{ name: string }>([{ name: "Pump 1" }]);
+    });
+  });
+
+  it("accepts the public datapoints API without exposing Cognite item shapes", () => {
+    typecheckOnly(() => {
+      const model = null as unknown as IndustrialModelClient;
+      const datapoints = model.datapoints;
+      const timeSeries = { space: "ts-space", externalId: "temperature" };
+
+      const rangeResult = datapoints.retrieve({
+        timeSeries: [timeSeries],
+        start: new Date("2024-01-01T00:00:00.000Z"),
+        end: new Date("2024-01-02T00:00:00.000Z"),
+        limit: 100,
+      });
+      const latestResult = datapoints.latest({
+        timeSeries: [{ ...timeSeries, before: new Date() }],
+        ignoreUnknownIds: true,
+      });
+
+      expectTypeOf(rangeResult).toEqualTypeOf<Promise<DatapointsResult>>();
+      expectTypeOf(latestResult).toEqualTypeOf<Promise<DatapointsResult>>();
+
+      void datapoints.insert([{ timeSeries, datapoints: [{ timestamp: new Date(), value: 42 }] }]);
+      void datapoints.delete([
+        {
+          timeSeries,
+          start: new Date("2024-01-01T00:00:00.000Z"),
+          end: new Date("2024-01-02T00:00:00.000Z"),
+        },
+      ]);
+    });
+  });
+
+  it("accepts the public files API and infers correct return types", () => {
+    typecheckOnly(() => {
+      const model = null as unknown as IndustrialModelClient;
+      const files = model.files;
+
+      const uploadResult = files.upload({
+        space: "file-space",
+        externalId: "doc-001",
+        name: "report.pdf",
+        mimeType: "application/pdf",
+        directory: "/reports",
+        source: "sap",
+        metadata: { project: "alpha" },
+      });
+      expectTypeOf(uploadResult).toEqualTypeOf<Promise<FileUploadResult>>();
+
+      const uploadWithContent = files.upload(
+        { space: "file-space", externalId: "doc-001", name: "report.pdf" },
+        new Blob(["hello"]),
+      );
+      expectTypeOf(uploadWithContent).toEqualTypeOf<Promise<FileUploadResult>>();
+
+      const urlsResult = files.getDownloadUrls([
+        { space: "file-space", externalId: "doc-001" },
+        { space: "file-space", externalId: "doc-002" },
+      ]);
+      expectTypeOf(urlsResult).toEqualTypeOf<Promise<FileDownloadUrl[]>>();
+    });
+  });
+
+  it("rejects file upload inputs that are missing required fields", () => {
+    typecheckOnly(() => {
+      const model = null as unknown as IndustrialModelClient;
+      const files = model.files;
+
+      // @ts-expect-error space is required
+      void files.upload({ externalId: "doc-001", name: "file.txt" });
+
+      // @ts-expect-error externalId is required
+      void files.upload({ space: "file-space", name: "file.txt" });
+
+      // @ts-expect-error name is required
+      void files.upload({ space: "file-space", externalId: "doc-001" });
+    });
+  });
+
+  it("rejects Cognite-shaped datapoints inputs", () => {
+    typecheckOnly(() => {
+      const model = null as unknown as IndustrialModelClient;
+      const datapoints = model.datapoints;
+      const timeSeries = { space: "ts-space", externalId: "temperature" };
+
+      void datapoints.retrieve({
+        // @ts-expect-error start must be a Date
+        start: "2024-01-01T00:00:00.000Z",
+        timeSeries: [timeSeries],
+      });
+
+      void datapoints.retrieve({
+        // @ts-expect-error use timeSeries instead of Cognite items
+        items: [timeSeries],
+      });
+
+      void datapoints.insert([
+        {
+          // @ts-expect-error use timeSeries instead of putting NodeId fields on the item
+          space: "ts-space",
+          externalId: "temperature",
+          datapoints: [{ timestamp: new Date(), value: 42 }],
+        },
+      ]);
+
+      void datapoints.delete([
+        {
+          timeSeries,
+          // @ts-expect-error start must be a Date
+          start: 1,
+        },
+      ]);
+
+      void datapoints.delete([
+        {
+          timeSeries,
+          start: new Date(),
+          // @ts-expect-error use start instead of Cognite inclusiveBegin
+          inclusiveBegin: 1,
+        },
+      ]);
     });
   });
 });

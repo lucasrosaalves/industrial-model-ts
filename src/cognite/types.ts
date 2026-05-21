@@ -1,4 +1,4 @@
-import type { DataModelId, NodeId, SortDirection } from "../types";
+import type { DataModelId, DatapointAggregate, NodeId, SortDirection } from "../types";
 
 export interface ViewReference {
   type: "view";
@@ -244,3 +244,108 @@ export interface InstancesAggregateResponse {
 }
 
 export type { DataModelId };
+
+/** Numeric datapoint from a raw (non-aggregate) time series query. */
+type CogniteDoubleDatapoint = { timestamp: Date; value: number };
+
+/** Numeric datapoint from an aggregate time series query.
+ *  Each field corresponds to one aggregate function as defined by the Cognite API. */
+export type CogniteAggregateDatapoint = { timestamp: Date } & {
+  [K in DatapointAggregate]?: number;
+};
+
+/** A numeric datapoint as returned by the Cognite API.
+ *  String time series datapoints are excluded — they are filtered out before processing. */
+export type CogniteNumericDatapoint = CogniteDoubleDatapoint | CogniteAggregateDatapoint;
+
+export interface CogniteDatapointResponse {
+  instanceId?: { space?: string; externalId?: string };
+  isString?: boolean;
+  unit?: string;
+  datapoints?: CogniteNumericDatapoint[];
+  nextCursor?: string;
+}
+
+export interface CogniteDatapointResultItem {
+  space?: string;
+  externalId?: string;
+  isString: boolean;
+  unit?: string;
+  datapoints: CogniteNumericDatapoint[];
+  nextCursor?: string;
+}
+
+export interface CogniteDatapointRetrieveItem extends NodeId {
+  start?: string | number | Date;
+  end?: string | number | Date;
+  limit?: number;
+  cursor?: string;
+  aggregates?: DatapointAggregate[];
+  granularity?: string;
+  includeOutsidePoints?: boolean;
+  targetUnit?: string;
+  targetUnitSystem?: string;
+  timeZone?: string;
+}
+
+export interface CogniteDatapointRetrieveOptions {
+  items: CogniteDatapointRetrieveItem[];
+  start?: string | number | Date;
+  end?: string | number | Date;
+  limit?: number;
+  aggregates?: DatapointAggregate[];
+  granularity?: string;
+  includeOutsidePoints?: boolean;
+  ignoreUnknownIds?: boolean;
+  timeZone?: string;
+}
+
+export interface CogniteDatapointLatestItem extends NodeId {
+  before?: string | Date | number;
+}
+
+export interface CogniteDatapointInsertItem extends NodeId {
+  datapoints: Array<{ timestamp: number | Date; value: number }>;
+}
+
+export interface CogniteDatapointDeleteItem extends NodeId {
+  inclusiveBegin: number | Date;
+  exclusiveEnd?: number | Date;
+}
+
+// ─── Files ────────────────────────────────────────────────────────────────────
+
+export interface CogniteFileInstanceId {
+  space?: string;
+  externalId?: string;
+}
+
+export interface CogniteFileInfo {
+  instanceId?: CogniteFileInstanceId;
+  name: string;
+  uploaded: boolean;
+  uploadedTime?: Date;
+  createdTime: Date;
+  lastUpdatedTime: Date;
+  mimeType?: string;
+  directory?: string;
+  source?: string;
+}
+
+export interface CogniteFileUploadResult extends CogniteFileInfo {
+  uploadUrl?: string;
+}
+
+export interface CogniteFileUploadInfo {
+  instanceId: { space: string; externalId: string };
+  name: string;
+  mimeType?: string;
+  directory?: string;
+  source?: string;
+  metadata?: Record<string, string>;
+}
+
+export interface CogniteFileDownloadUrl {
+  instanceId?: CogniteFileInstanceId;
+  downloadUrl: string;
+}

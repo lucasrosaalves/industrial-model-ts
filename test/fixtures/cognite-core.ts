@@ -46,6 +46,12 @@ export function makeCogniteMock(
     searchInstances: vi.fn(),
     aggregateInstances: vi.fn(),
     applyInstances: vi.fn(),
+    retrieveDatapoints: vi.fn(),
+    retrieveLatestDatapoints: vi.fn(),
+    insertDatapoints: vi.fn(),
+    deleteDatapoints: vi.fn(),
+    uploadFile: vi.fn(),
+    getFileDownloadUrls: vi.fn(),
   };
 }
 
@@ -68,6 +74,10 @@ export function makeCogniteClientMock(options?: {
   searchResponse?: InstancesSearchResponse;
   aggregateResponse?: import("../../src/cognite").InstancesAggregateResponse;
   applyResponse?: import("../../src/cognite").InstancesApplyResponse;
+  datapointsRetrieveResponse?: unknown[];
+  datapointsLatestResponse?: unknown[];
+  fileUploadResponse?: unknown;
+  fileDownloadUrlsResponse?: unknown[];
 }): CogniteClient {
   return {
     dataModels: {
@@ -81,6 +91,23 @@ export function makeCogniteClientMock(options?: {
       search: vi.fn().mockResolvedValue(options?.searchResponse ?? { items: [] }),
       aggregate: vi.fn().mockResolvedValue(options?.aggregateResponse ?? { items: [] }),
       apply: vi.fn().mockResolvedValue(options?.applyResponse ?? { items: [] }),
+    },
+    datapoints: {
+      retrieve: vi.fn().mockResolvedValue(options?.datapointsRetrieveResponse ?? []),
+      retrieveLatest: vi.fn().mockResolvedValue(options?.datapointsLatestResponse ?? []),
+      insert: vi.fn().mockResolvedValue(undefined),
+      delete: vi.fn().mockResolvedValue(undefined),
+    },
+    files: {
+      upload: vi.fn().mockResolvedValue(
+        options?.fileUploadResponse ?? {
+          name: "file.txt",
+          uploaded: false,
+          createdTime: new Date(0),
+          lastUpdatedTime: new Date(0),
+        },
+      ),
+      getDownloadUrls: vi.fn().mockResolvedValue(options?.fileDownloadUrlsResponse ?? []),
     },
   } as unknown as CogniteClient;
 }

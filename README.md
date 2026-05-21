@@ -13,6 +13,8 @@ TypeScript SDK for querying [Cognite Flexible Data Models (FDM)](https://docs.co
 - **Pagination support** - use cursors manually or fetch all root pages with `limit: -1`.
 - **Aggregation support** - count, group, list distinct values, and aggregate numeric properties.
 - **Mutation support** - upsert model-shaped node patches and delete nodes by identity.
+- **Datapoints support** - read, write, and delete time series datapoints through model-friendly option objects.
+- **Files support** - upload files and retrieve pre-signed download URLs, keyed to model node identities.
 - **Runtime validation option** - parse query results with Zod schemas derived from Cognite view metadata.
 - **CJS and ESM builds** - works in Node.js and common bundler setups.
 
@@ -627,6 +629,122 @@ await core.delete([{ space: "asset-space", externalId: "pump-1" }]);
 
 Deletes are sent through Cognite apply. When more than 1000 nodes are provided, the SDK splits them into multiple Cognite calls.
 
+## Datapoints
+
+Use `model.datapoints` for Cognite time series data. The public API talks in terms of `timeSeries`, ranges, and datapoint batches; the Cognite SDK `items` and `instanceId` payload shape stays internal.
+
+```ts
+const { items } = await model.datapoints.retrieve({
+  timeSeries: [{ space: "ts-space", externalId: "temperature", targetUnit: "degC" }],
+  start: new Date("2024-01-01T00:00:00.000Z"),
+  end: new Date("2024-01-02T00:00:00.000Z"),
+  limit: 100,
+});
+
+items[0]?.timeSeries.externalId;
+items[0]?.datapoints;
+items[0]?.cursor; // next cursor, or null
+```
+
+Pass `limit: -1` to follow datapoint cursors and return all pages for each requested time series.
+
+```ts
+const history = await model.datapoints.retrieve({
+  timeSeries: [{ space: "ts-space", externalId: "temperature" }],
+  start: new Date("2024-01-01T00:00:00.000Z"),
+  limit: -1,
+});
+```
+
+Read the latest datapoint before a given timestamp:
+
+```ts
+const latest = await model.datapoints.latest({
+  timeSeries: [{ space: "ts-space", externalId: "temperature" }],
+  ignoreUnknownIds: true,
+});
+```
+
+Write datapoints by passing an array of insert items directly:
+
+```ts
+await model.datapoints.insert([
+  {
+    timeSeries: { space: "ts-space", externalId: "temperature" },
+    datapoints: [{ timestamp: new Date(), value: 42 }],
+  },
+]);
+```
+
+Delete datapoints by passing an array of ranges directly:
+
+```ts
+await model.datapoints.delete([
+  {
+    timeSeries: { space: "ts-space", externalId: "temperature" },
+    start: new Date("2024-01-01T00:00:00.000Z"),
+    end: new Date("2024-01-02T00:00:00.000Z"),
+  },
+]);
+```
+
+## Files
+
+Use `model.files` to upload files to Cognite and retrieve pre-signed download URLs. Both operations use `space` and `externalId` node identities as keys; the Cognite `instanceId` payload shape stays internal.
+
+Upload a file and optionally pass the binary content as a second argument to complete the upload in one call. When content is provided, Cognite uploads it inline and `uploaded` is `true` on the result.
+
+```ts
+const result = await model.files.upload(
+  {
+    space: "file-space",
+    externalId: "report-2024",
+    name: "annual-report.pdf",
+    mimeType: "application/pdf",
+    directory: "/reports",
+    source: "erp",
+    metadata: { department: "finance", year: "2024" },
+  },
+  pdfContent, // Buffer, Blob, ArrayBuffer, ReadableStream, …
+);
+
+result.space;          // "file-space"
+result.externalId;     // "report-2024"
+result.name;           // "annual-report.pdf"
+result.uploaded;       // true — content was provided
+result.createdTime;    // Date
+result.lastUpdatedTime; // Date
+```
+
+Omit the content argument to receive a pre-signed `uploadUrl` instead. Use it to push the file binary from the client side without routing it through your server:
+
+```ts
+const result = await model.files.upload({
+  space: "file-space",
+  externalId: "report-2024",
+  name: "annual-report.pdf",
+  mimeType: "application/pdf",
+});
+
+result.uploaded;   // false — content not yet uploaded
+result.uploadUrl;  // "https://storage.example.com/…" — use to PUT the file
+```
+
+Retrieve pre-signed download URLs for one or more files by node identity:
+
+```ts
+const urls = await model.files.getDownloadUrls([
+  { space: "file-space", externalId: "report-2024" },
+  { space: "file-space", externalId: "manual-v3" },
+]);
+
+urls[0]?.downloadUrl; // pre-signed URL ready to use
+urls[0]?.space;
+urls[0]?.externalId;
+```
+
+The returned array preserves the input order. Passing an empty array returns `[]` without calling Cognite.
+
 ## Aggregation
 
 Use `aggregate()` when you need grouped counts, distinct values, or numeric summaries without loading every instance.
@@ -826,6 +944,15 @@ Deletes are view-independent:
 await core.delete([{ space: "asset-space", externalId: "pump-1" }]);
 ```
 
+`core.datapoints` exposes the same executor API as `model.datapoints` on `IndustrialModelClient`:
+
+```ts
+const { items } = await core.datapoints.retrieve({
+  timeSeries: [{ space: "ts-space", externalId: "temperature" }],
+  limit: 100,
+});
+```
+
 All Cognite Core view types are exported from `industrial-model` and can be imported directly for use with `IndustrialModelClient` if needed:
 
 ```ts
@@ -987,6 +1114,10 @@ Same as `model.upsert<TModel>()(options)` on `IndustrialModelClient`, with the v
 
 Same as `model.delete(items)` on `IndustrialModelClient`. Deletes nodes by `space` and `externalId`; no view name is required.
 
+### `core.datapoints`
+
+Same as `model.datapoints` on `IndustrialModelClient`. All four methods — `retrieve`, `latest`, `insert`, and `delete` — are available without a view name.
+
 ### `new IndustrialModelClient(client, dataModelId, options?)`
 
 | Parameter | Type | Description |
@@ -1093,6 +1224,50 @@ Provide at least one of `groupBy` or `aggregate`. Omit `aggregate` to fetch dist
 | `max` | `{ max: "volume" }` | Maximum numeric value. |
 | `sum` | `{ sum: "volume" }` | Sum of a numeric property. |
 
+### `model.files.upload(fileInfo, content?)`
+
+Uploads a file to Cognite. `fileInfo` fields:
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `space` | `string` | Node space. |
+| `externalId` | `string` | Node external ID. |
+| `name` | `string` | File name. |
+| `mimeType` | `string` | Optional MIME type. |
+| `directory` | `string` | Optional directory path within the project. |
+| `source` | `string` | Optional source system identifier. |
+| `metadata` | `Record<string, string>` | Optional key-value metadata. |
+
+`content` accepts any value accepted by the Cognite SDK file upload (`Buffer`, `Blob`, `ArrayBuffer`, `ReadableStream`, …). When provided, the file is uploaded inline and `uploaded` is `true`. When omitted, Cognite returns a pre-signed `uploadUrl` for a separate upload and `uploaded` is `false`.
+
+Returns `FileUploadResult`:
+
+```ts
+type FileUploadResult = NodeId & {
+  name: string;
+  uploaded: boolean;
+  mimeType?: string;
+  directory?: string;
+  source?: string;
+  uploadedTime?: Date;
+  createdTime: Date;
+  lastUpdatedTime: Date;
+  uploadUrl?: string;
+};
+```
+
+### `model.files.getDownloadUrls(nodeIds)`
+
+Retrieves one pre-signed download URL per node, in the same order as the input. Passing an empty array returns `[]` without calling Cognite.
+
+Returns `FileDownloadUrl[]`:
+
+```ts
+type FileDownloadUrl = NodeId & {
+  downloadUrl: string;
+};
+```
+
 ### Filter Operators
 
 | Field type | Operators |
@@ -1132,6 +1307,8 @@ Logical combinators `AND`, `OR`, and `NOT` are supported at any nesting level, i
 | `UpsertResult`, `UpsertResultItem` | Upsert output types. |
 | `DeleteExecutor`, `DeleteResult`, `DeleteResultItem` | Delete helper and output types. |
 | `EdgeCreationContext`, `EdgeCreationCallback`, `EdgeCreationCallbacks`, `EdgeMode` | Edge upsert helper types. |
+| `DatapointsExecutor`, `DatapointsRetrieveOptions`, `DatapointsLatestOptions`, `DatapointsLatestSeries`, `DatapointsInsertItem`, `DatapointsDeleteRange`, `DatapointsResult`, `DatapointSeriesResult`, `DatapointAggregate` | Datapoints types. |
+| `FilesExecutor`, `FileUploadInfo`, `FileUploadResult`, `FileDownloadUrl` | Files types. |
 | `IndustrialModelClientOptions` | Client configuration options. |
 
 **Cognite Core**

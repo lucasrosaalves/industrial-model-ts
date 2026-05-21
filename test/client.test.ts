@@ -394,11 +394,319 @@ describe("IndustrialModelClient", () => {
     const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
 
     await expect(model.delete([{ space: "asset-space" } as never])).rejects.toThrow(
-      /expected NodeId values/,
+      /Invalid delete options.*items\.0\.externalId/s,
     );
 
     const apply = (client.instances as unknown as { apply: ReturnType<typeof vi.fn> }).apply;
     expect(apply).not.toHaveBeenCalled();
+  });
+
+  it("retrieves datapoints with a timeSeries-oriented public API", async () => {
+    const client = makeCogniteClientMock({
+      datapointsRetrieveResponse: [
+        {
+          instanceId: { space: "ts-space", externalId: "temperature" },
+          isString: false,
+          datapoints: [{ timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 42 }],
+          nextCursor: "next-page",
+        },
+      ],
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    const result = await model.datapoints.retrieve({
+      timeSeries: [{ space: "ts-space", externalId: "temperature" }],
+      start: new Date("2024-01-01T00:00:00.000Z"),
+      end: new Date("2024-01-02T00:00:00.000Z"),
+      limit: 100,
+    });
+
+    expect(client.datapoints.retrieve).toHaveBeenCalledWith({
+      start: new Date("2024-01-01T00:00:00.000Z"),
+      end: new Date("2024-01-02T00:00:00.000Z"),
+      limit: 100,
+      items: [{ instanceId: { space: "ts-space", externalId: "temperature" } }],
+    });
+    expect(result.items[0]).toEqual({
+      timeSeries: { space: "ts-space", externalId: "temperature" },
+      datapoints: [{ timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 42 }],
+      cursor: "next-page",
+    });
+  });
+
+  it("silently excludes string time series from retrieve results", async () => {
+    const client = makeCogniteClientMock({
+      datapointsRetrieveResponse: [
+        {
+          instanceId: { space: "ts-space", externalId: "temperature" },
+          isString: false,
+          datapoints: [{ timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 42 }],
+        },
+        {
+          instanceId: { space: "ts-space", externalId: "label" },
+          isString: true,
+          datapoints: [{ timestamp: new Date("2024-01-01T00:00:00.000Z"), value: "on" }],
+        },
+      ],
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    const result = await model.datapoints.retrieve({
+      timeSeries: [
+        { space: "ts-space", externalId: "temperature" },
+        { space: "ts-space", externalId: "label" },
+      ],
+    });
+
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0]?.timeSeries.externalId).toBe("temperature");
+  });
+
+  it("retrieves aggregate datapoints and maps each to { timestamp, value }", async () => {
+    const client = makeCogniteClientMock({
+      datapointsRetrieveResponse: [
+        {
+          instanceId: { space: "ts-space", externalId: "temperature" },
+          isString: false,
+          datapoints: [
+            { timestamp: new Date("2024-01-01T00:00:00.000Z"), average: 21.5 },
+            { timestamp: new Date("2024-01-01T01:00:00.000Z"), average: 22.0 },
+          ],
+        },
+      ],
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    const result = await model.datapoints.retrieve({
+      timeSeries: [{ space: "ts-space", externalId: "temperature" }],
+      aggregate: "average",
+      granularity: "1h",
+    });
+
+    expect(client.datapoints.retrieve).toHaveBeenCalledWith(
+      expect.objectContaining({ aggregates: ["average"], granularity: "1h" }),
+    );
+    expect(result.items[0]?.datapoints).toEqual([
+      { timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 21.5 },
+      { timestamp: new Date("2024-01-01T01:00:00.000Z"), value: 22.0 },
+    ]);
+  });
+
+  it("auto-paginates datapoints when limit is -1", async () => {
+    const client = makeCogniteClientMock();
+    vi.mocked(client.datapoints.retrieve)
+      .mockResolvedValueOnce([
+        {
+          instanceId: { space: "ts-space", externalId: "temperature" },
+          isString: false,
+          datapoints: [{ timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 1 }],
+          nextCursor: "cursor-2",
+        },
+      ] as never)
+      .mockResolvedValueOnce([
+        {
+          instanceId: { space: "ts-space", externalId: "temperature" },
+          isString: false,
+          datapoints: [{ timestamp: new Date("2024-01-01T00:01:00.000Z"), value: 2 }],
+        },
+      ] as never);
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    const result = await model.datapoints.retrieve({
+      timeSeries: [{ space: "ts-space", externalId: "temperature" }],
+      limit: -1,
+    });
+
+    expect(client.datapoints.retrieve).toHaveBeenCalledTimes(2);
+    expect(client.datapoints.retrieve).toHaveBeenLastCalledWith({
+      limit: -1,
+      items: [
+        {
+          instanceId: { space: "ts-space", externalId: "temperature" },
+          cursor: "cursor-2",
+        },
+      ],
+    });
+    expect(result.items[0]?.datapoints).toEqual([
+      { timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 1 },
+      { timestamp: new Date("2024-01-01T00:01:00.000Z"), value: 2 },
+    ]);
+    expect(result.items[0]?.cursor).toBeNull();
+  });
+
+  it("rejects invalid datapoints range dates before calling Cognite", async () => {
+    const client = makeCogniteClientMock();
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    await expect(
+      model.datapoints.retrieve({
+        timeSeries: [{ space: "ts-space", externalId: "temperature" }],
+        start: new Date("not-a-date"),
+      }),
+    ).rejects.toThrow(/Invalid datapoints options.*\bstart\b/s);
+
+    await expect(
+      model.datapoints.delete([
+        {
+          timeSeries: { space: "ts-space", externalId: "temperature" },
+          start: new Date("2024-01-01T00:00:00.000Z"),
+          end: new Date("not-a-date"),
+        },
+      ]),
+    ).rejects.toThrow(/Invalid datapoints options.*ranges\.0\.end/s);
+
+    expect(client.datapoints.retrieve).not.toHaveBeenCalled();
+    expect(client.datapoints.delete).not.toHaveBeenCalled();
+  });
+
+  it("maps latest, insert, and delete datapoints to Cognite requests internally", async () => {
+    const client = makeCogniteClientMock({
+      datapointsLatestResponse: [
+        {
+          instanceId: { space: "ts-space", externalId: "temperature" },
+          isString: false,
+          datapoints: [{ timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 42 }],
+        },
+      ],
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+    const { datapoints } = model;
+    const timeSeries = { space: "ts-space", externalId: "temperature" };
+
+    await datapoints.latest({
+      timeSeries: [{ ...timeSeries, before: new Date("2024-01-02T00:00:00.000Z") }],
+      ignoreUnknownIds: true,
+    });
+    await datapoints.insert([{ timeSeries, datapoints: [{ timestamp: new Date(1), value: 42 }] }]);
+    await datapoints.delete([
+      {
+        timeSeries,
+        start: new Date("2024-01-01T00:00:00.000Z"),
+        end: new Date("2024-01-02T00:00:00.000Z"),
+      },
+    ]);
+
+    expect(client.datapoints.retrieveLatest).toHaveBeenCalledWith(
+      [
+        {
+          instanceId: timeSeries,
+          before: new Date("2024-01-02T00:00:00.000Z"),
+        },
+      ],
+      { ignoreUnknownIds: true },
+    );
+    expect(client.datapoints.insert).toHaveBeenCalledWith([
+      {
+        instanceId: timeSeries,
+        datapoints: [{ timestamp: new Date(1), value: 42 }],
+      },
+    ]);
+    expect(client.datapoints.delete).toHaveBeenCalledWith([
+      {
+        instanceId: timeSeries,
+        inclusiveBegin: new Date("2024-01-01T00:00:00.000Z"),
+        exclusiveEnd: new Date("2024-01-02T00:00:00.000Z"),
+      },
+    ]);
+  });
+
+  it("uploads a file and maps the response to FileUploadResult", async () => {
+    const createdTime = new Date("2024-03-01T00:00:00.000Z");
+    const lastUpdatedTime = new Date("2024-03-02T00:00:00.000Z");
+    const uploadUrl = "https://storage.example.com/upload";
+    const client = makeCogniteClientMock({
+      fileUploadResponse: {
+        instanceId: { space: "file-space", externalId: "doc-001" },
+        name: "report.pdf",
+        uploaded: false,
+        mimeType: "application/pdf",
+        createdTime,
+        lastUpdatedTime,
+        uploadUrl,
+      },
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    const result = await model.files.upload({
+      space: "file-space",
+      externalId: "doc-001",
+      name: "report.pdf",
+      mimeType: "application/pdf",
+    });
+
+    const upload = (client.files as unknown as { upload: ReturnType<typeof vi.fn> }).upload;
+    expect(upload).toHaveBeenCalledWith(
+      expect.objectContaining({
+        instanceId: { space: "file-space", externalId: "doc-001" },
+        name: "report.pdf",
+        mimeType: "application/pdf",
+      }),
+      undefined,
+      false,
+      false,
+    );
+    expect(result).toMatchObject({
+      space: "file-space",
+      externalId: "doc-001",
+      name: "report.pdf",
+      uploaded: false,
+      mimeType: "application/pdf",
+      createdTime,
+      lastUpdatedTime,
+      uploadUrl,
+    });
+  });
+
+  it("retrieves file download URLs for given node IDs", async () => {
+    const client = makeCogniteClientMock({
+      fileDownloadUrlsResponse: [
+        {
+          instanceId: { space: "file-space", externalId: "doc-001" },
+          downloadUrl: "https://storage.example.com/doc-001",
+        },
+        {
+          instanceId: { space: "file-space", externalId: "doc-002" },
+          downloadUrl: "https://storage.example.com/doc-002",
+        },
+      ],
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    const result = await model.files.getDownloadUrls([
+      { space: "file-space", externalId: "doc-001" },
+      { space: "file-space", externalId: "doc-002" },
+    ]);
+
+    const getUrls = (client.files as unknown as { getDownloadUrls: ReturnType<typeof vi.fn> })
+      .getDownloadUrls;
+    expect(getUrls).toHaveBeenCalledWith([
+      { instanceId: { space: "file-space", externalId: "doc-001" } },
+      { instanceId: { space: "file-space", externalId: "doc-002" } },
+    ]);
+    expect(result).toEqual([
+      {
+        space: "file-space",
+        externalId: "doc-001",
+        downloadUrl: "https://storage.example.com/doc-001",
+      },
+      {
+        space: "file-space",
+        externalId: "doc-002",
+        downloadUrl: "https://storage.example.com/doc-002",
+      },
+    ]);
+  });
+
+  it("returns an empty list from getDownloadUrls without calling Cognite when nodeIds is empty", async () => {
+    const client = makeCogniteClientMock();
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    const result = await model.files.getDownloadUrls([]);
+
+    const getUrls = (client.files as unknown as { getDownloadUrls: ReturnType<typeof vi.fn> })
+      .getDownloadUrls;
+    expect(result).toEqual([]);
+    expect(getUrls).not.toHaveBeenCalled();
   });
 
   it("runs aggregate end-to-end with grouped count", async () => {

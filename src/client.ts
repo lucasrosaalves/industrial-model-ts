@@ -9,6 +9,8 @@ import {
 import { DEFAULT_LIMIT, MAX_DEPENDENCY_DEPTH } from "./constants";
 import { AggregateMapper } from "./mappers/aggregate-mapper";
 import { AggregateResultMapper } from "./mappers/aggregate-result-mapper";
+import { DatapointsMapper } from "./mappers/datapoints-mapper";
+import { FilesMapper } from "./mappers/files-mapper";
 import { QueryMapper } from "./mappers/query-mapper";
 import { QueryResultMapper } from "./mappers/result-mapper";
 import { UpsertMapper } from "./mappers/upsert-mapper";
@@ -19,7 +21,9 @@ import type {
   AggregateResult,
   AggregateResultItem,
   DataModelId,
+  DatapointsExecutor,
   DeleteResult,
+  FilesExecutor,
   IndustrialModelClientOptions,
   NodeId,
   QueryExecutor,
@@ -32,12 +36,13 @@ import type {
   UpsertOptions,
   UpsertResult,
 } from "./types";
+import { chunks } from "./utils/array";
 import {
   appendNodesAndEdges,
   getQueryForDependenciesPagination,
   mapNodesAndEdges,
 } from "./utils/query";
-import { QueryResultValidator } from "./validators";
+import { DeleteValidator, QueryResultValidator } from "./validators";
 
 const APPLY_ITEM_LIMIT = 1000;
 
@@ -48,6 +53,9 @@ export class IndustrialModelClient {
   private readonly upsertMapper: UpsertMapper;
   private readonly aggregateResultMapper: AggregateResultMapper;
   private readonly resultMapper: QueryResultMapper;
+  private readonly datapointsMapper: DatapointsMapper;
+  private readonly filesMapper: FilesMapper;
+  private readonly deleteValidator = new DeleteValidator();
   private readonly resultValidator: QueryResultValidator;
   private readonly validateResults: boolean;
 
@@ -64,6 +72,8 @@ export class IndustrialModelClient {
     this.upsertMapper = new UpsertMapper(viewMapper, cognite);
     this.aggregateResultMapper = new AggregateResultMapper();
     this.resultMapper = new QueryResultMapper(viewMapper);
+    this.datapointsMapper = new DatapointsMapper(cognite);
+    this.filesMapper = new FilesMapper(cognite);
     this.resultValidator = new QueryResultValidator(viewMapper);
     this.validateResults = options.validateResults ?? false;
   }
@@ -93,15 +103,25 @@ export class IndustrialModelClient {
     return execute as unknown as UpsertExecutor<TModel>;
   }
 
+  readonly files: FilesExecutor = {
+    upload: (fileInfo, content) => this.filesMapper.upload(fileInfo, content),
+    getDownloadUrls: (nodeIds) => this.filesMapper.getDownloadUrls(nodeIds),
+  };
+
+  readonly datapoints: DatapointsExecutor = {
+    retrieve: (options) => this.datapointsMapper.retrieve(options),
+    latest: (options) => this.datapointsMapper.retrieveLatest(options),
+    insert: (items) => this.datapointsMapper.insert(items),
+    delete: (ranges) => this.datapointsMapper.delete(ranges),
+  };
+
   async delete<TItem extends NodeId>(items: TItem[]): Promise<DeleteResult> {
-    const deleteItems = items.map((item) => {
-      assertNodeId(item);
-      return {
-        instanceType: "node" as const,
-        space: item.space,
-        externalId: item.externalId,
-      };
-    });
+    this.deleteValidator.validateItems(items);
+    const deleteItems = items.map((item) => ({
+      instanceType: "node" as const,
+      space: item.space,
+      externalId: item.externalId,
+    }));
 
     const response = await this.applyInstancesInChunks({
       items: [],
@@ -230,27 +250,5 @@ export class IndustrialModelClient {
     );
 
     return appendNodesAndEdges(result, nestedResults);
-  }
-}
-
-function chunks<TItem>(items: TItem[], size: number): TItem[][] {
-  const result: TItem[][] = [];
-  for (let index = 0; index < items.length; index += size) {
-    result.push(items.slice(index, index + size));
-  }
-  return result;
-}
-
-function assertNodeId(value: unknown): asserts value is NodeId {
-  if (
-    value == null ||
-    typeof value !== "object" ||
-    Array.isArray(value) ||
-    typeof (value as Partial<NodeId>).space !== "string" ||
-    (value as Partial<NodeId>).space?.length === 0 ||
-    typeof (value as Partial<NodeId>).externalId !== "string" ||
-    (value as Partial<NodeId>).externalId?.length === 0
-  ) {
-    throw new Error("Invalid delete options:\n- items: expected NodeId values");
   }
 }

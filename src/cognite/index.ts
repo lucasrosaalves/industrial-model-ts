@@ -1,6 +1,18 @@
 export { createCogniteAdapter } from "./adapter";
 export type { CognitePort } from "./port";
 export type {
+  CogniteAggregateDatapoint,
+  CogniteDatapointDeleteItem,
+  CogniteDatapointInsertItem,
+  CogniteDatapointLatestItem,
+  CogniteDatapointResponse,
+  CogniteDatapointResultItem,
+  CogniteDatapointRetrieveItem,
+  CogniteDatapointRetrieveOptions,
+  CogniteFileDownloadUrl,
+  CogniteFileUploadInfo,
+  CogniteFileUploadResult,
+  CogniteNumericDatapoint,
   DataModelRetrieveItem,
   DataModelRetrieveOptions,
   EdgeConnection,
