@@ -53,6 +53,26 @@ const equipmentView: ViewDefinition = {
   properties: {},
 };
 
+const enumView: ViewDefinition = {
+  space: "test_space",
+  externalId: "WidgetInput",
+  version: "1",
+  properties: {
+    dataType: {
+      container: {},
+      containerPropertyIdentifier: "dataType",
+      type: {
+        type: "enum",
+        values: {
+          STRING: { name: "STRING" },
+          NUMBER: { name: "NUMBER" },
+          BOOLEAN: { name: "BOOLEAN" },
+        },
+      },
+    },
+  },
+};
+
 describe("parseViews", () => {
   it("projects core view definitions into generator view definitions", () => {
     const views = parseViews([equipmentView, assetView]);
@@ -120,5 +140,18 @@ describe("parseViews", () => {
         }),
       ]),
     );
+  });
+
+  it("extracts enum values from properties with type 'enum'", () => {
+    const views = parseViews([enumView]);
+    const widget = views[0];
+    const dataTypeField = widget.fields.find((f) => f.fieldName === "dataType");
+
+    expect(dataTypeField).toMatchObject({
+      fieldName: "dataType",
+      cogniteType: "enum",
+      mappedType: "string",
+      enumValues: ["STRING", "NUMBER", "BOOLEAN"],
+    });
   });
 });

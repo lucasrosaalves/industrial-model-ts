@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildViewSchema } from "../src/validation.js";
+import { buildViewSchema, propertyValueSchema } from "../src/validation.js";
 import { getCogniteCoreView } from "./fixtures/index.js";
+import type { ViewPropertyDefinition } from "../src/cognite/index.js";
 
 describe("buildViewSchema", () => {
   const schema = buildViewSchema(getCogniteCoreView("CogniteAsset"));
@@ -42,5 +43,27 @@ describe("buildViewSchema", () => {
     if (result.success) {
       expect(result.data.sourceCreatedTime).toBeInstanceOf(Date);
     }
+  });
+});
+
+describe("propertyValueSchema - enum", () => {
+  const enumProp: ViewPropertyDefinition = {
+    container: {},
+    containerPropertyIdentifier: "status",
+    type: {
+      type: "enum",
+      values: { RUNNING: { name: "RUNNING" }, STOPPED: { name: "STOPPED" } },
+    },
+  };
+
+  it("accepts valid enum values", () => {
+    const schema = propertyValueSchema(enumProp);
+    expect(schema.safeParse("RUNNING").success).toBe(true);
+    expect(schema.safeParse("STOPPED").success).toBe(true);
+  });
+
+  it("rejects invalid enum values", () => {
+    const schema = propertyValueSchema(enumProp);
+    expect(schema.safeParse("INVALID").success).toBe(false);
   });
 });

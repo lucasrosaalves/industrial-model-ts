@@ -26,6 +26,7 @@ const mockViews: ViewDefinition[] = [
         relationTarget: null,
         relationTargetSpace: null,
         relationTargetExternalId: null,
+        enumValues: null,
       },
       {
         fieldName: "temperature",
@@ -41,6 +42,23 @@ const mockViews: ViewDefinition[] = [
         relationTarget: null,
         relationTargetSpace: null,
         relationTargetExternalId: null,
+        enumValues: null,
+      },
+      {
+        fieldName: "status",
+        originalName: "status",
+        cogniteType: "enum",
+        mappedType: "string",
+        isNullable: true,
+        isList: false,
+        isRelation: false,
+        isEdge: false,
+        isReverseRelation: false,
+        isListDirectRelation: false,
+        relationTarget: null,
+        relationTargetSpace: null,
+        relationTargetExternalId: null,
+        enumValues: ["RUNNING", "STOPPED", "MAINTENANCE"],
       },
     ],
   },
@@ -64,6 +82,7 @@ const mockViews: ViewDefinition[] = [
         relationTarget: null,
         relationTargetSpace: null,
         relationTargetExternalId: null,
+        enumValues: null,
       },
       {
         fieldName: "role",
@@ -79,6 +98,7 @@ const mockViews: ViewDefinition[] = [
         relationTarget: "Role",
         relationTargetSpace: "imported_space",
         relationTargetExternalId: "Role",
+        enumValues: null,
       },
       {
         fieldName: "tags",
@@ -94,6 +114,7 @@ const mockViews: ViewDefinition[] = [
         relationTarget: null,
         relationTargetSpace: null,
         relationTargetExternalId: null,
+        enumValues: null,
       },
     ],
   },
@@ -117,6 +138,7 @@ const mockViews: ViewDefinition[] = [
         relationTarget: null,
         relationTargetSpace: null,
         relationTargetExternalId: null,
+        enumValues: null,
       },
       {
         fieldName: "users",
@@ -132,6 +154,7 @@ const mockViews: ViewDefinition[] = [
         relationTarget: "User",
         relationTargetSpace: "target_space",
         relationTargetExternalId: "User",
+        enumValues: null,
       },
     ],
   },
@@ -193,6 +216,20 @@ describe("renderTypes", () => {
     const roleSection = output.split("export type Role")[1];
 
     expect(roleSection).not.toContain("users: NodeId[]");
+  });
+
+  it("generates enum type aliases as string unions", () => {
+    const output = renderTypes(mockViews, mockConfig);
+
+    expect(output).toContain(
+      'export type EquipmentStatus = "RUNNING" | "STOPPED" | "MAINTENANCE";',
+    );
+  });
+
+  it("uses enum type alias in the interface field", () => {
+    const output = renderTypes(mockViews, mockConfig);
+
+    expect(output).toContain("status?: EquipmentStatus;");
   });
 });
 
