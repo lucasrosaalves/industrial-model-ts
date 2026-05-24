@@ -45,7 +45,8 @@ export function getRelationTypeFields(view: ViewDefinition): FieldDefinition[] {
 export function getInterfaceType(field: FieldDefinition, viewName?: string): string {
   if (field.isRelation && !field.isList) return "NodeId";
   if (field.isEdge || (field.isRelation && field.isList)) return "NodeId[]";
-  const baseType = field.enumValues && viewName ? getEnumTypeName(viewName, field) : field.mappedType;
+  const baseType =
+    field.enumValues && viewName ? getEnumTypeName(viewName, field) : field.mappedType;
   if (field.isList) return `${baseType}[]`;
   return baseType;
 }

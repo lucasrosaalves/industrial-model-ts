@@ -145,7 +145,7 @@ describe("parseViews", () => {
   it("extracts enum values from properties with type 'enum'", () => {
     const views = parseViews([enumView]);
     const widget = views[0];
-    const dataTypeField = widget.fields.find((f) => f.fieldName === "dataType");
+    const dataTypeField = widget?.fields.find((f) => f.fieldName === "dataType");
 
     expect(dataTypeField).toMatchObject({
       fieldName: "dataType",

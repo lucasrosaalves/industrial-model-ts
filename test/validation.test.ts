@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
+import type { ViewPropertyDefinition } from "../src/cognite/index.js";
 import { buildViewSchema, propertyValueSchema } from "../src/validation.js";
 import { getCogniteCoreView } from "./fixtures/index.js";
-import type { ViewPropertyDefinition } from "../src/cognite/index.js";
 
 describe("buildViewSchema", () => {
   const schema = buildViewSchema(getCogniteCoreView("CogniteAsset"));
