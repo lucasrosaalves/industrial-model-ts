@@ -11,6 +11,7 @@ export interface ViewPropertyType {
   type?: string;
   source?: ViewReference;
   list?: boolean;
+  values?: Record<string, { name?: string }>;
 }
 
 export interface ViewPropertyDefinition {

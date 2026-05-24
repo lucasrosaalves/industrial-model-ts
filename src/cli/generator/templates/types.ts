@@ -4,6 +4,7 @@
 
 import type { ViewDefinition } from "../models";
 import {
+  getEnumTypeName,
   getInterfaceType,
   getPropsFields,
   getRelationResolvedType,
@@ -30,8 +31,16 @@ export function renderTypes(views: ViewDefinition[], config: GeneratorConfig): s
     "  UpsertResult,",
     '} from "industrial-model";',
     "",
-    renderViewExternalIdUnion(views, config),
   ];
+
+  // Render enum type aliases
+  const enumAliases = renderEnumTypeAliases(views);
+  if (enumAliases) {
+    lines.push(enumAliases);
+    lines.push("");
+  }
+
+  lines.push(renderViewExternalIdUnion(views, config));
 
   for (const view of views) {
     lines.push("");
@@ -51,13 +60,27 @@ function renderViewExternalIdUnion(views: ViewDefinition[], config: GeneratorCon
 ${views.map((view) => `  | "${view.viewExternalId}"`).join("\n")};`;
 }
 
+function renderEnumTypeAliases(views: ViewDefinition[]): string {
+  const aliases: string[] = [];
+  for (const view of views) {
+    for (const field of view.fields) {
+      if (field.enumValues && field.enumValues.length > 0) {
+        const typeName = getEnumTypeName(view.viewName, field);
+        const union = field.enumValues.map((v) => `"${v}"`).join(" | ");
+        aliases.push(`export type ${typeName} = ${union};`);
+      }
+    }
+  }
+  return aliases.join("\n");
+}
+
 function renderView(view: ViewDefinition): string {
   const propsFields = getPropsFields(view);
   const relationFields = getRelationTypeFields(view);
 
   if (relationFields.length === 0) {
     const propsLines = propsFields.map(
-      (f) => `  ${f.fieldName}${f.isNullable ? "?" : ""}: ${getInterfaceType(f)};`,
+      (f) => `  ${f.fieldName}${f.isNullable ? "?" : ""}: ${getInterfaceType(f, view.viewName)};`,
     );
 
     return `export type ${view.viewName} = IndustrialModel<{
@@ -66,7 +89,7 @@ ${propsLines.join("\n")}
   }
 
   const propsLines = propsFields.map(
-    (f) => `    ${f.fieldName}${f.isNullable ? "?" : ""}: ${getInterfaceType(f)};`,
+    (f) => `    ${f.fieldName}${f.isNullable ? "?" : ""}: ${getInterfaceType(f, view.viewName)};`,
   );
   const relLines = relationFields.map(
     (f) => `    ${f.fieldName}${f.isNullable ? "?" : ""}: ${getRelationResolvedType(f)};`,

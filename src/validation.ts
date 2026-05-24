@@ -30,8 +30,15 @@ export function propertyValueSchema(
 
   switch (type.type) {
     case "text":
-    case "enum":
       schema = z.string();
+      break;
+    case "enum":
+      if (type.values && Object.keys(type.values).length > 0) {
+        const values = Object.keys(type.values) as [string, ...string[]];
+        schema = z.enum(values);
+      } else {
+        schema = z.string();
+      }
       break;
     case "int32":
     case "int64":

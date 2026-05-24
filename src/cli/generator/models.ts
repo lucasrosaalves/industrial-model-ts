@@ -18,6 +18,7 @@ export interface FieldDefinition {
   relationTarget: string | null;
   relationTargetSpace: string | null;
   relationTargetExternalId: string | null;
+  enumValues: string[] | null;
 }
 
 export interface ViewDefinition {
@@ -41,11 +42,18 @@ export function getRelationTypeFields(view: ViewDefinition): FieldDefinition[] {
 }
 
 /** TypeScript type for a field in the Props type param */
-export function getInterfaceType(field: FieldDefinition): string {
+export function getInterfaceType(field: FieldDefinition, viewName?: string): string {
   if (field.isRelation && !field.isList) return "NodeId";
   if (field.isEdge || (field.isRelation && field.isList)) return "NodeId[]";
-  if (field.isList) return `${field.mappedType}[]`;
-  return field.mappedType;
+  const baseType = field.enumValues && viewName ? getEnumTypeName(viewName, field) : field.mappedType;
+  if (field.isList) return `${baseType}[]`;
+  return baseType;
+}
+
+/** Generated type alias name for an enum field */
+export function getEnumTypeName(viewName: string, field: FieldDefinition): string {
+  const capitalized = field.fieldName.charAt(0).toUpperCase() + field.fieldName.slice(1);
+  return `${viewName}${capitalized}`;
 }
 
 /** TypeScript type for a field in the Relations type param */
