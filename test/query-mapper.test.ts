@@ -80,6 +80,16 @@ describe("QueryMapper", () => {
     });
   });
 
+  it("uses Cognite's max root limit when auto-paginating all pages", async () => {
+    const query = await mapper.map<{ name: string }>({
+      viewExternalId: "CogniteAsset",
+      select: { name: true },
+      limit: -1,
+    });
+
+    expect(query.with.CogniteAsset).toMatchObject({ limit: 10_000 });
+  });
+
   it("maps filters through FilterMapper using fixture views", async () => {
     const query = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",

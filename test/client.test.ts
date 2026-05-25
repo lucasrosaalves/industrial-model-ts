@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { NodeDefinition } from "../src/cognite/index.js";
 import { type IndustrialModel, IndustrialModelClient, type NodeId } from "../src/index.js";
 import type { AggregateDefinition } from "../src/types.js";
 import {
@@ -47,6 +48,63 @@ describe("IndustrialModelClient", () => {
       name: "Root Asset",
       parent: { externalId: "parent-asset", name: "Parent Asset" },
     });
+  });
+
+  it("auto-paginates root queries with Cognite's max page size when limit is -1", async () => {
+    const makeAssetPage = (start: number, count: number): NodeDefinition[] =>
+      Array.from({ length: count }, (_, index) => {
+        const id = start + index;
+        return {
+          instanceType: "node",
+          space: "asset-space",
+          externalId: `asset-${id}`,
+          properties: {
+            cdf_cdm: {
+              "CogniteAsset/v1": { name: `Asset ${id}` },
+            },
+          },
+        };
+      });
+
+    const client = makeCogniteClientMock();
+    const query = (client.instances as unknown as { query: ReturnType<typeof vi.fn> }).query;
+    query
+      .mockResolvedValueOnce({
+        items: { CogniteAsset: makeAssetPage(0, 10_000) },
+        nextCursor: { CogniteAsset: "page-2" },
+      })
+      .mockResolvedValueOnce({
+        items: { CogniteAsset: makeAssetPage(10_000, 2) },
+        nextCursor: {},
+      });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Asset = IndustrialModel<{ name: string }>;
+    const { items, cursor } = await model.query<Asset>()({
+      viewExternalId: "CogniteAsset",
+      select: { name: true },
+      limit: -1,
+    });
+
+    expect(query).toHaveBeenCalledTimes(2);
+    expect(query).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        with: expect.objectContaining({
+          CogniteAsset: expect.objectContaining({ limit: 10_000 }),
+        }),
+      }),
+    );
+    expect(query).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        cursors: { CogniteAsset: "page-2" },
+      }),
+    );
+    expect(items).toHaveLength(10_002);
+    expect(items[0]?.name).toBe("Asset 0");
+    expect(items[items.length - 1]?.name).toBe("Asset 10001");
+    expect(cursor).toBeNull();
   });
 
   it("runs query with text search filters through the Cognite search API", async () => {

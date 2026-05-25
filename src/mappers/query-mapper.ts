@@ -47,7 +47,7 @@ export class QueryMapper {
       limit: requestedLimit = DEFAULT_LIMIT,
       cursor = null,
     } = options;
-    const limit = requestedLimit === -1 ? DEFAULT_LIMIT : requestedLimit;
+    const limit = requestedLimit === -1 ? MAX_LIMIT : requestedLimit;
 
     const rootView = await this.viewMapper.getView(viewExternalId);
     await this.validator.validate(options, rootView);
