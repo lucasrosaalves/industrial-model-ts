@@ -19,6 +19,7 @@ export const generateCommand = new Command("generate")
   .option("--data-model <space/id/version>", "Data model identifier")
   .option("--output <path>", "Output directory")
   .option("--client-name <name>", "Name for the generated client function")
+  .option("--json-types <path>", "Path to a TypeScript file with JSON property type overrides")
   .action(async (flags) => {
     const auth = await promptAuth({
       token: flags.token,
@@ -38,6 +39,7 @@ export const generateCommand = new Command("generate")
     const options = await promptOptions({
       outputPath: flags.output,
       clientName: flags.clientName,
+      jsonTypes: flags.jsonTypes,
     });
 
     const config = createGeneratorConfig({
