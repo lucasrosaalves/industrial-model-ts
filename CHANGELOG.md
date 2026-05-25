@@ -1,5 +1,12 @@
 # industrial-model
 
+## 0.10.0
+
+### Minor Changes
+
+- 3073658: -Add support for enums on the generator
+  -Fix query stop clause when limit is -1. The query was executing one last time returning an empty result and cursor
+
 ## 0.9.0
 
 ### Minor Changes
