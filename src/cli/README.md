@@ -48,6 +48,7 @@ After authentication, if the JWT contains `projects` and `aud` claims, the CLI p
 | `--data-model <space/id/version>` | Data model identifier (e.g. `"my-space/MyModel/1"`) |
 | `--output <path>` | Output directory (default: `./generated`) |
 | `--client-name <name>` | Pascal-case name for the client (default: derived from data model ID) |
+| `--json-types <path>` | Path to a TypeScript file with JSON property type overrides (optional) |
 
 When flags are omitted and no token is provided, the CLI falls back to interactive prompts. If `--token`, `--project`, and `--base-url` are provided but `--data-model` is not, the CLI connects to CDF and presents a fuzzy-searchable list of available data models.
 
@@ -160,3 +161,49 @@ const { items } = await client.equipment.query({
 // items[0].name        — string
 // items[0].facility    — { name: string } | undefined
 ```
+
+## JSON property type overrides
+
+By default, Cognite `json` (JSONObject) properties are generated as `unknown`. You can provide a TypeScript file that maps specific JSON properties to custom types, which the generator will copy into the generated `types.ts`.
+
+### Usage
+
+```bash
+# Flag mode
+npx industrial-model generate --json-types ./json-types.ts
+
+# Interactive mode (defaults to json-types.ts)
+npx industrial-model generate
+# → "Path to JSON property type overrides file: (json-types.ts)"
+```
+
+### Example `json-types.ts`
+
+```ts
+export type SensorMetadata = {
+  unit: string;
+  precision: number;
+  calibrationDate: string;
+};
+
+export type GeoCoordinates = {
+  lat: number;
+  lng: number;
+  altitude?: number;
+};
+
+export const jsonPropertyTypes = [
+  { space: "my_space", view: "Sensor", property: "metadata", type: "SensorMetadata" },
+  { space: "my_space", view: "Sensor", property: "location", type: "GeoCoordinates" },
+  { space: "my_space", view: "Facility", property: "coordinates", type: "GeoCoordinates" },
+] as const;
+```
+
+### Rules
+
+- Each entry in `jsonPropertyTypes` must have `space`, `view`, `property`, and `type` fields.
+- `space` and `view` identify the Cognite view (by space and externalId). No version needed.
+- `property` is the original property name in Cognite (not the camelCase field name).
+- `type` must reference an exported type or interface from the same file.
+- The referenced property must exist in the data model and be of type `json`. The generator will error otherwise.
+- Types are copied verbatim into the generated `types.ts` — no import from the config file at runtime.
