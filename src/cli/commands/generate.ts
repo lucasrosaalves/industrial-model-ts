@@ -6,6 +6,10 @@ import { CogniteClient } from "@cognite/sdk";
 import { Command } from "commander";
 import { createCogniteAdapter } from "../../cognite";
 import { ViewMapper } from "../../mappers/view-mapper";
+import {
+  type JsonTypesConfig,
+  parseJsonTypesFile,
+} from "../generator/json-types-parser";
 import { createGeneratorConfig, generate } from "../generator/renderer";
 import { promptAuth } from "../prompts/auth";
 import { promptDataModel } from "../prompts/data-model";
@@ -63,7 +67,23 @@ export const generateCommand = new Command("generate")
       process.exit(1);
     }
 
-    generate(views, config);
+    // Parse JSON type overrides if provided
+    let jsonTypesConfig: JsonTypesConfig | undefined;
+    if (options.jsonTypesPath) {
+      try {
+        jsonTypesConfig = parseJsonTypesFile(options.jsonTypesPath);
+        console.log(
+          `\nLoaded ${jsonTypesConfig.overrides.length} JSON type override(s) from ${options.jsonTypesPath}`,
+        );
+      } catch (error) {
+        console.error(
+          `\nError loading JSON types file: ${error instanceof Error ? error.message : error}`,
+        );
+        process.exit(1);
+      }
+    }
+
+    generate(views, config, jsonTypesConfig);
 
     console.log(
       `\n✓ Generated ${views.length} view(s) to ${config.outputPath}/${config.dataModelId}/`,
