@@ -59,6 +59,8 @@ function processMappedProperty(
   const isList = prop.type.list === true;
   const isRelation = cogniteType === "direct";
   const relationSource = getDirectRelationSource(prop);
+  const enumValues =
+    cogniteType === "enum" && prop.type.values ? Object.keys(prop.type.values) : null;
 
   let relationTarget: string | null = null;
   let relationTargetSpace: string | null = null;
@@ -84,6 +86,7 @@ function processMappedProperty(
     relationTarget,
     relationTargetSpace,
     relationTargetExternalId,
+    enumValues,
   };
 }
 
@@ -106,6 +109,7 @@ function processEdgeProperty(
     relationTarget: toPascal(prop.source.externalId),
     relationTargetSpace: prop.source.space,
     relationTargetExternalId: prop.source.externalId,
+    enumValues: null,
   };
 }
 
@@ -130,5 +134,6 @@ function processReverseProperty(
     relationTarget: toPascal(prop.source.externalId),
     relationTargetSpace: prop.source.space,
     relationTargetExternalId: prop.source.externalId,
+    enumValues: null,
   };
 }

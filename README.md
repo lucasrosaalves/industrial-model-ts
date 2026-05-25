@@ -503,7 +503,7 @@ do {
 } while (cursor !== null);
 ```
 
-Pass `limit: -1` when you want the SDK to follow all root cursors automatically. The SDK issues multiple `instances.query` calls, using 1000 root items per page by default, and returns `cursor: null`.
+Pass `limit: -1` when you want the SDK to follow all root cursors automatically. The SDK issues multiple `instances.query` calls, using 10000 root items per page, and returns `cursor: null`.
 
 ```ts
 const { items } = await model.query<CogniteAsset>()({

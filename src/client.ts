@@ -6,7 +6,7 @@ import {
   type InstancesQueryRequest,
   type InstancesQueryResponse,
 } from "./cognite";
-import { DEFAULT_LIMIT, MAX_DEPENDENCY_DEPTH } from "./constants";
+import { DEFAULT_LIMIT, MAX_DEPENDENCY_DEPTH, MAX_LIMIT } from "./constants";
 import { AggregateMapper } from "./mappers/aggregate-mapper";
 import { AggregateResultMapper } from "./mappers/aggregate-result-mapper";
 import { DatapointsMapper } from "./mappers/datapoints-mapper";
@@ -186,7 +186,8 @@ export class IndustrialModelClient {
   private async queryInternal<TModel, TSelect extends QuerySelect<TModel> | undefined = undefined>(
     options: QueryOptions<TModel, TSelect>,
   ): Promise<QueryResult<QueryResultItem<TModel, TSelect>>> {
-    const { viewExternalId, limit = DEFAULT_LIMIT } = options;
+    const { viewExternalId } = options;
+    const effectiveLimit = options.limit === -1 ? MAX_LIMIT : (options.limit ?? DEFAULT_LIMIT);
     const allPages = options.limit === -1;
     const cogniteQuery = await this.queryMapper.map(options);
     const data: QueryResultItem<TModel, TSelect>[] = [];
@@ -210,7 +211,7 @@ export class IndustrialModelClient {
         ? await this.resultValidator.parseItems(viewExternalId, mappedPageResult, options.select)
         : mappedPageResult;
       const nextCursor = queryResult.nextCursor[viewExternalId] ?? null;
-      const isLastPage = pageResult.length < limit || !nextCursor;
+      const isLastPage = pageResult.length < effectiveLimit || !nextCursor;
       const resolvedCursor = isLastPage ? null : nextCursor;
 
       data.push(...(pageResult as QueryResultItem<TModel, TSelect>[]));
