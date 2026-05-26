@@ -3,6 +3,7 @@
  */
 
 import { CogniteClient } from "@cognite/sdk";
+import { input } from "@inquirer/prompts";
 import { Command } from "commander";
 import { createCogniteAdapter } from "../../cognite";
 import { ViewMapper } from "../../mappers/view-mapper";
@@ -40,10 +41,19 @@ export const generateCommand = new Command("generate")
 
     const dataModel = await promptDataModel(client, flags.dataModel);
 
+    // JSON type overrides — asked right after data model selection
+    const jsonTypesPath =
+      flags.jsonTypes ||
+      (await input({
+        message:
+          "Path to JSON property type overrides file (leave empty to skip):",
+        default: "json-types.ts",
+      })) ||
+      undefined;
+
     const options = await promptOptions({
       outputPath: flags.output,
       clientName: flags.clientName,
-      jsonTypes: flags.jsonTypes,
     });
 
     const config = createGeneratorConfig({
@@ -69,11 +79,11 @@ export const generateCommand = new Command("generate")
 
     // Parse JSON type overrides if provided
     let jsonTypesConfig: JsonTypesConfig | undefined;
-    if (options.jsonTypesPath) {
+    if (jsonTypesPath) {
       try {
-        jsonTypesConfig = parseJsonTypesFile(options.jsonTypesPath);
+        jsonTypesConfig = parseJsonTypesFile(jsonTypesPath);
         console.log(
-          `\nLoaded ${jsonTypesConfig.overrides.length} JSON type override(s) from ${options.jsonTypesPath}`,
+          `\nLoaded ${jsonTypesConfig.overrides.length} JSON type override(s) from ${jsonTypesPath}`,
         );
       } catch (error) {
         console.error(
