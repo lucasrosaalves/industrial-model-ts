@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.11.0
+
+### Minor Changes
+
+- 7091d26: Include strong typing for JSONObject properties in cognite via config file json-types.ts
+
 ## 0.10.0
 
 ### Minor Changes
