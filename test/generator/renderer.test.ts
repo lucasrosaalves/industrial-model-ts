@@ -1,7 +1,8 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+import type { JsonTypesConfig } from "../../src/cli/generator/json-types-parser";
 import type { ViewDefinition } from "../../src/cli/generator/models";
 import { type GeneratorConfig, generateFromDefinitions } from "../../src/cli/generator/renderer";
 
@@ -49,5 +50,54 @@ describe("generateFromDefinitions", () => {
     expect(existsSync(join(outputDir, "client.ts"))).toBe(true);
     expect(existsSync(join(outputDir, "index.ts"))).toBe(true);
     expect(existsSync(join(outputDir, "models.ts"))).toBe(false);
+  });
+
+  it("includes custom type declarations in generated types.ts", () => {
+    const config = makeConfig();
+    const views: ViewDefinition[] = [
+      {
+        viewName: "Sensor",
+        viewExternalId: "Sensor",
+        viewSpace: "my_space",
+        viewVersion: "1",
+        fields: [
+          {
+            fieldName: "metadata",
+            originalName: "metadata",
+            cogniteType: "json",
+            mappedType: "SensorMetadata",
+            isNullable: true,
+            isList: false,
+            isRelation: false,
+            isEdge: false,
+            isReverseRelation: false,
+            isListDirectRelation: false,
+            relationTarget: null,
+            relationTargetSpace: null,
+            relationTargetExternalId: null,
+            enumValues: null,
+          },
+        ],
+      },
+    ];
+
+    const jsonTypesConfig: JsonTypesConfig = {
+      typeDeclarations: new Map([
+        ["SensorMetadata", "export type SensorMetadata = { unit: string; precision: number };"],
+      ]),
+      overrides: [
+        { space: "my_space", view: "Sensor", property: "metadata", type: "SensorMetadata" },
+      ],
+    };
+
+    generateFromDefinitions(views, config, jsonTypesConfig);
+
+    const outputDir = join(config.outputPath, config.dataModelId);
+    const typesContent = readFileSync(join(outputDir, "types.ts"), "utf-8");
+    expect(typesContent).toContain(
+      "export type SensorMetadata = { unit: string; precision: number }",
+    );
+    expect(typesContent).toContain("metadata?: SensorMetadata");
+    expect(typesContent).not.toContain("unknown");
   });
 });

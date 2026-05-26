@@ -6,6 +6,7 @@ import { existsSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ViewDefinition as CogniteViewDefinition } from "../../cognite";
 import { toPascal } from "./helpers";
+import type { JsonTypesConfig } from "./json-types-parser";
 import type { ViewDefinition } from "./models";
 import { parseViews } from "./parser";
 import { renderClient } from "./templates/client";
@@ -44,14 +45,56 @@ export function createGeneratorConfig(options: {
   };
 }
 
-export function generate(views: CogniteViewDefinition[], config: GeneratorConfig): void {
+export function generate(
+  views: CogniteViewDefinition[],
+  config: GeneratorConfig,
+  jsonTypesConfig?: JsonTypesConfig,
+): void {
   const viewDefinitions = parseViews(views);
-  generateFromDefinitions(viewDefinitions, config);
+
+  // Validate and apply JSON type overrides
+  if (jsonTypesConfig) {
+    applyJsonTypeOverrides(viewDefinitions, jsonTypesConfig);
+  }
+
+  generateFromDefinitions(viewDefinitions, config, jsonTypesConfig);
+}
+
+function applyJsonTypeOverrides(views: ViewDefinition[], jsonTypesConfig: JsonTypesConfig): void {
+  for (const override of jsonTypesConfig.overrides) {
+    const view = views.find(
+      (v) => v.viewExternalId === override.view && v.viewSpace === override.space,
+    );
+
+    if (!view) {
+      throw new Error(
+        `JSON types config error: view "${override.space}/${override.view}" not found in data model`,
+      );
+    }
+
+    const field = view.fields.find((f) => f.originalName === override.property);
+
+    if (!field) {
+      throw new Error(
+        `JSON types config error: property "${override.property}" not found in view "${override.space}/${override.view}"`,
+      );
+    }
+
+    if (field.cogniteType !== "json") {
+      throw new Error(
+        `JSON types config error: property "${override.property}" in view "${override.space}/${override.view}" ` +
+          `is of type "${field.cogniteType}", not "json"`,
+      );
+    }
+
+    field.mappedType = override.type;
+  }
 }
 
 export function generateFromDefinitions(
   viewDefinitions: ViewDefinition[],
   config: GeneratorConfig,
+  jsonTypesConfig?: JsonTypesConfig,
 ): void {
   const outputDir = join(config.outputPath, config.dataModelId);
 
@@ -60,7 +103,14 @@ export function generateFromDefinitions(
   }
   mkdirSync(outputDir, { recursive: true });
 
-  writeFileSync(join(outputDir, "types.ts"), renderTypes(viewDefinitions, config));
+  const customTypeDeclarations = jsonTypesConfig
+    ? Array.from(jsonTypesConfig.typeDeclarations.values())
+    : [];
+
+  writeFileSync(
+    join(outputDir, "types.ts"),
+    renderTypes(viewDefinitions, config, customTypeDeclarations),
+  );
   writeFileSync(join(outputDir, "client.ts"), renderClient(viewDefinitions, config));
   writeFileSync(join(outputDir, "index.ts"), renderIndex(config));
 }

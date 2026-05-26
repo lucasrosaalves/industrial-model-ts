@@ -13,7 +13,11 @@ import {
 import type { GeneratorConfig } from "../renderer";
 import { renderHeader } from "./header";
 
-export function renderTypes(views: ViewDefinition[], config: GeneratorConfig): string {
+export function renderTypes(
+  views: ViewDefinition[],
+  config: GeneratorConfig,
+  customTypeDeclarations: string[] = [],
+): string {
   const lines: string[] = [
     renderHeader(config),
     "",
@@ -37,6 +41,12 @@ export function renderTypes(views: ViewDefinition[], config: GeneratorConfig): s
   const enumAliases = renderEnumTypeAliases(views);
   if (enumAliases) {
     lines.push(enumAliases);
+    lines.push("");
+  }
+
+  // Render custom JSON type declarations
+  if (customTypeDeclarations.length > 0) {
+    lines.push(customTypeDeclarations.join("\n\n"));
     lines.push("");
   }
 

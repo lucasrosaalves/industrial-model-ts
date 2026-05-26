@@ -2,10 +2,13 @@
  * `industrial-model generate` command.
  */
 
+import { existsSync } from "node:fs";
 import { CogniteClient } from "@cognite/sdk";
+import { input } from "@inquirer/prompts";
 import { Command } from "commander";
 import { createCogniteAdapter } from "../../cognite";
 import { ViewMapper } from "../../mappers/view-mapper";
+import { type JsonTypesConfig, parseJsonTypesFile } from "../generator/json-types-parser";
 import { createGeneratorConfig, generate } from "../generator/renderer";
 import { promptAuth } from "../prompts/auth";
 import { promptDataModel } from "../prompts/data-model";
@@ -19,6 +22,7 @@ export const generateCommand = new Command("generate")
   .option("--data-model <space/id/version>", "Data model identifier")
   .option("--output <path>", "Output directory")
   .option("--client-name <name>", "Name for the generated client function")
+  .option("--json-types <path>", "Path to a TypeScript file with JSON property type overrides")
   .action(async (flags) => {
     const auth = await promptAuth({
       token: flags.token,
@@ -34,6 +38,15 @@ export const generateCommand = new Command("generate")
     });
 
     const dataModel = await promptDataModel(client, flags.dataModel);
+
+    // JSON type overrides — asked right after data model selection
+    const jsonTypesPath =
+      flags.jsonTypes ||
+      (await input({
+        message: "Path to JSON property type overrides file (leave empty to skip):",
+        default: "json-types.ts",
+      })) ||
+      undefined;
 
     const options = await promptOptions({
       outputPath: flags.output,
@@ -61,7 +74,27 @@ export const generateCommand = new Command("generate")
       process.exit(1);
     }
 
-    generate(views, config);
+    // Parse JSON type overrides if provided
+    let jsonTypesConfig: JsonTypesConfig | undefined;
+    if (jsonTypesPath) {
+      if (!existsSync(jsonTypesPath)) {
+        console.warn(`\n⚠ JSON types file not found: ${jsonTypesPath} — skipping type overrides`);
+      } else {
+        try {
+          jsonTypesConfig = parseJsonTypesFile(jsonTypesPath);
+          console.log(
+            `\nLoaded ${jsonTypesConfig.overrides.length} JSON type override(s) from ${jsonTypesPath}`,
+          );
+        } catch (error) {
+          console.error(
+            `\nError loading JSON types file: ${error instanceof Error ? error.message : error}`,
+          );
+          process.exit(1);
+        }
+      }
+    }
+
+    generate(views, config, jsonTypesConfig);
 
     console.log(
       `\n✓ Generated ${views.length} view(s) to ${config.outputPath}/${config.dataModelId}/`,
