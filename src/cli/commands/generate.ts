@@ -4,6 +4,7 @@
 
 import { CogniteClient } from "@cognite/sdk";
 import { input } from "@inquirer/prompts";
+import { existsSync } from "node:fs";
 import { Command } from "commander";
 import { createCogniteAdapter } from "../../cognite";
 import { ViewMapper } from "../../mappers/view-mapper";
@@ -80,16 +81,22 @@ export const generateCommand = new Command("generate")
     // Parse JSON type overrides if provided
     let jsonTypesConfig: JsonTypesConfig | undefined;
     if (jsonTypesPath) {
-      try {
-        jsonTypesConfig = parseJsonTypesFile(jsonTypesPath);
-        console.log(
-          `\nLoaded ${jsonTypesConfig.overrides.length} JSON type override(s) from ${jsonTypesPath}`,
+      if (!existsSync(jsonTypesPath)) {
+        console.warn(
+          `\n⚠ JSON types file not found: ${jsonTypesPath} — skipping type overrides`,
         );
-      } catch (error) {
-        console.error(
-          `\nError loading JSON types file: ${error instanceof Error ? error.message : error}`,
-        );
-        process.exit(1);
+      } else {
+        try {
+          jsonTypesConfig = parseJsonTypesFile(jsonTypesPath);
+          console.log(
+            `\nLoaded ${jsonTypesConfig.overrides.length} JSON type override(s) from ${jsonTypesPath}`,
+          );
+        } catch (error) {
+          console.error(
+            `\nError loading JSON types file: ${error instanceof Error ? error.message : error}`,
+          );
+          process.exit(1);
+        }
       }
     }
 
