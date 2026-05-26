@@ -2,16 +2,13 @@
  * `industrial-model generate` command.
  */
 
+import { existsSync } from "node:fs";
 import { CogniteClient } from "@cognite/sdk";
 import { input } from "@inquirer/prompts";
-import { existsSync } from "node:fs";
 import { Command } from "commander";
 import { createCogniteAdapter } from "../../cognite";
 import { ViewMapper } from "../../mappers/view-mapper";
-import {
-  type JsonTypesConfig,
-  parseJsonTypesFile,
-} from "../generator/json-types-parser";
+import { type JsonTypesConfig, parseJsonTypesFile } from "../generator/json-types-parser";
 import { createGeneratorConfig, generate } from "../generator/renderer";
 import { promptAuth } from "../prompts/auth";
 import { promptDataModel } from "../prompts/data-model";
@@ -46,8 +43,7 @@ export const generateCommand = new Command("generate")
     const jsonTypesPath =
       flags.jsonTypes ||
       (await input({
-        message:
-          "Path to JSON property type overrides file (leave empty to skip):",
+        message: "Path to JSON property type overrides file (leave empty to skip):",
         default: "json-types.ts",
       })) ||
       undefined;
@@ -82,9 +78,7 @@ export const generateCommand = new Command("generate")
     let jsonTypesConfig: JsonTypesConfig | undefined;
     if (jsonTypesPath) {
       if (!existsSync(jsonTypesPath)) {
-        console.warn(
-          `\n⚠ JSON types file not found: ${jsonTypesPath} — skipping type overrides`,
-        );
+        console.warn(`\n⚠ JSON types file not found: ${jsonTypesPath} — skipping type overrides`);
       } else {
         try {
           jsonTypesConfig = parseJsonTypesFile(jsonTypesPath);

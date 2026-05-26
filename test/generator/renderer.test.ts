@@ -94,7 +94,9 @@ describe("generateFromDefinitions", () => {
 
     const outputDir = join(config.outputPath, config.dataModelId);
     const typesContent = readFileSync(join(outputDir, "types.ts"), "utf-8");
-    expect(typesContent).toContain("export type SensorMetadata = { unit: string; precision: number }");
+    expect(typesContent).toContain(
+      "export type SensorMetadata = { unit: string; precision: number }",
+    );
     expect(typesContent).toContain("metadata?: SensorMetadata");
     expect(typesContent).not.toContain("unknown");
   });

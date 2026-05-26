@@ -2,9 +2,9 @@
  * Tests for json-types-parser.
  */
 
-import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, it, expect, beforeAll, afterAll } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { parseJsonTypesFile } from "../../src/cli/generator/json-types-parser";
 
 const tmpDir = join(__dirname, ".tmp-json-types");
@@ -73,9 +73,7 @@ export const jsonPropertyTypes = [
   });
 
   it("throws if file does not exist", () => {
-    expect(() => parseJsonTypesFile("/nonexistent/path.ts")).toThrow(
-      "JSON types file not found",
-    );
+    expect(() => parseJsonTypesFile("/nonexistent/path.ts")).toThrow("JSON types file not found");
   });
 
   it("throws if type reference does not match an export", () => {
@@ -90,9 +88,7 @@ export const jsonPropertyTypes = [
 `,
     );
 
-    expect(() => parseJsonTypesFile(filePath)).toThrow(
-      'type "NonExistent" referenced by',
-    );
+    expect(() => parseJsonTypesFile(filePath)).toThrow('type "NonExistent" referenced by');
   });
 
   it("throws if jsonPropertyTypes is empty or missing", () => {
@@ -104,7 +100,9 @@ export const jsonPropertyTypes = [] as const;
 `,
     );
 
-    expect(() => parseJsonTypesFile(filePath)).toThrow("no \"jsonPropertyTypes\" export found or it is empty");
+    expect(() => parseJsonTypesFile(filePath)).toThrow(
+      'no "jsonPropertyTypes" export found or it is empty',
+    );
   });
 
   it("throws if entry is missing required fields", () => {

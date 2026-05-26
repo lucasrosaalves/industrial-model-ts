@@ -60,10 +60,7 @@ export function generate(
   generateFromDefinitions(viewDefinitions, config, jsonTypesConfig);
 }
 
-function applyJsonTypeOverrides(
-  views: ViewDefinition[],
-  jsonTypesConfig: JsonTypesConfig,
-): void {
+function applyJsonTypeOverrides(views: ViewDefinition[], jsonTypesConfig: JsonTypesConfig): void {
   for (const override of jsonTypesConfig.overrides) {
     const view = views.find(
       (v) => v.viewExternalId === override.view && v.viewSpace === override.space,

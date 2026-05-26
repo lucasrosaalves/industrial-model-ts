@@ -14,8 +14,8 @@
  * ```
  */
 
-import * as fs from "fs";
-import * as path from "path";
+import * as fs from "node:fs";
+import * as path from "node:path";
 import * as ts from "typescript";
 
 export interface JsonTypeOverride {
@@ -40,12 +40,7 @@ export function parseJsonTypesFile(filePath: string): JsonTypesConfig {
   }
 
   const sourceText = fs.readFileSync(absolutePath, "utf-8");
-  const sourceFile = ts.createSourceFile(
-    absolutePath,
-    sourceText,
-    ts.ScriptTarget.Latest,
-    true,
-  );
+  const sourceFile = ts.createSourceFile(absolutePath, sourceText, ts.ScriptTarget.Latest, true);
 
   const typeDeclarations = new Map<string, string>();
   const overrides: JsonTypeOverride[] = [];
@@ -53,27 +48,18 @@ export function parseJsonTypesFile(filePath: string): JsonTypesConfig {
   // Walk top-level statements
   for (const statement of sourceFile.statements) {
     // Collect exported type aliases and interfaces
-    if (
-      ts.isTypeAliasDeclaration(statement) &&
-      hasExportModifier(statement)
-    ) {
+    if (ts.isTypeAliasDeclaration(statement) && hasExportModifier(statement)) {
       const name = statement.name.text;
       typeDeclarations.set(name, statement.getText(sourceFile));
     }
 
-    if (
-      ts.isInterfaceDeclaration(statement) &&
-      hasExportModifier(statement)
-    ) {
+    if (ts.isInterfaceDeclaration(statement) && hasExportModifier(statement)) {
       const name = statement.name.text;
       typeDeclarations.set(name, statement.getText(sourceFile));
     }
 
     // Find the jsonPropertyTypes export
-    if (
-      ts.isVariableStatement(statement) &&
-      hasExportModifier(statement)
-    ) {
+    if (ts.isVariableStatement(statement) && hasExportModifier(statement)) {
       for (const decl of statement.declarationList.declarations) {
         if (
           ts.isIdentifier(decl.name) &&
@@ -108,16 +94,11 @@ export function parseJsonTypesFile(filePath: string): JsonTypesConfig {
 }
 
 function hasExportModifier(node: ts.Node): boolean {
-  const modifiers = ts.canHaveModifiers(node)
-    ? ts.getModifiers(node)
-    : undefined;
+  const modifiers = ts.canHaveModifiers(node) ? ts.getModifiers(node) : undefined;
   return modifiers?.some((m) => m.kind === ts.SyntaxKind.ExportKeyword) ?? false;
 }
 
-function extractMappings(
-  node: ts.Expression,
-  sourceFile: ts.SourceFile,
-): JsonTypeOverride[] {
+function extractMappings(node: ts.Expression, sourceFile: ts.SourceFile): JsonTypeOverride[] {
   // Handle `[...] as const` or just `[...]`
   let arrayNode: ts.Expression = node;
   if (ts.isAsExpression(node)) {
@@ -125,9 +106,7 @@ function extractMappings(
   }
 
   if (!ts.isArrayLiteralExpression(arrayNode)) {
-    throw new Error(
-      "JSON types config error: jsonPropertyTypes must be an array literal",
-    );
+    throw new Error("JSON types config error: jsonPropertyTypes must be an array literal");
   }
 
   const results: JsonTypeOverride[] = [];
