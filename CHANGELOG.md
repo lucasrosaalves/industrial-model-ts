@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.11.1
+
+### Patch Changes
+
+- a3894b5: Allow for non-nullable properties and change json-type override properties with clearer name
+
 ## 0.11.0
 
 ### Minor Changes
