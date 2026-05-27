@@ -8,8 +8,8 @@
  * export type Coordinates = { lat: number; lng: number };
  *
  * export const jsonPropertyTypes = [
- *   { space: "my_space", view: "MyView", property: "metadata", type: "Metadata" },
- *   { space: "my_space", view: "MyView", property: "location", type: "Coordinates" },
+ *   { viewSpace: "my_space", viewExternalId: "MyView", viewProperty: "metadata", expectedType: "Metadata" },
+ *   { viewSpace: "my_space", viewExternalId: "MyView", viewProperty: "location", expectedType: "Coordinates" },
  * ] as const;
  * ```
  */
@@ -19,10 +19,10 @@ import * as path from "node:path";
 import * as ts from "typescript";
 
 export interface JsonTypeOverride {
-  space: string;
-  view: string;
-  property: string;
-  type: string;
+  viewSpace: string;
+  viewExternalId: string;
+  viewProperty: string;
+  expectedType: string;
 }
 
 export interface JsonTypesConfig {
@@ -75,10 +75,10 @@ export function parseJsonTypesFile(filePath: string): JsonTypesConfig {
 
   // Validate that all type references exist
   for (const override of overrides) {
-    if (!typeDeclarations.has(override.type)) {
+    if (!typeDeclarations.has(override.expectedType)) {
       throw new Error(
-        `JSON types config error: type "${override.type}" referenced by ` +
-          `property "${override.space}/${override.view}/${override.property}" ` +
+        `JSON types config error: type "${override.expectedType}" referenced by ` +
+          `property "${override.viewSpace}/${override.viewExternalId}/${override.viewProperty}" ` +
           `is not exported from ${filePath}`,
       );
     }
@@ -129,18 +129,18 @@ function extractMappings(node: ts.Expression, sourceFile: ts.SourceFile): JsonTy
       }
     }
 
-    if (!obj.space || !obj.view || !obj.property || !obj.type) {
+    if (!obj.viewSpace || !obj.viewExternalId || !obj.viewProperty || !obj.expectedType) {
       throw new Error(
-        `JSON types config error: each entry must have "space", "view", "property", and "type" fields. ` +
+        `JSON types config error: each entry must have "viewSpace", "viewExternalId", "viewProperty", and "expectedType" fields. ` +
           `Got: ${element.getText(sourceFile)}`,
       );
     }
 
     results.push({
-      space: obj.space,
-      view: obj.view,
-      property: obj.property,
-      type: obj.type,
+      viewSpace: obj.viewSpace,
+      viewExternalId: obj.viewExternalId,
+      viewProperty: obj.viewProperty,
+      expectedType: obj.expectedType,
     });
   }
 

@@ -63,31 +63,31 @@ export function generate(
 function applyJsonTypeOverrides(views: ViewDefinition[], jsonTypesConfig: JsonTypesConfig): void {
   for (const override of jsonTypesConfig.overrides) {
     const view = views.find(
-      (v) => v.viewExternalId === override.view && v.viewSpace === override.space,
+      (v) => v.viewExternalId === override.viewExternalId && v.viewSpace === override.viewSpace,
     );
 
     if (!view) {
       throw new Error(
-        `JSON types config error: view "${override.space}/${override.view}" not found in data model`,
+        `JSON types config error: view "${override.viewSpace}/${override.viewExternalId}" not found in data model`,
       );
     }
 
-    const field = view.fields.find((f) => f.originalName === override.property);
+    const field = view.fields.find((f) => f.originalName === override.viewProperty);
 
     if (!field) {
       throw new Error(
-        `JSON types config error: property "${override.property}" not found in view "${override.space}/${override.view}"`,
+        `JSON types config error: property "${override.viewProperty}" not found in view "${override.viewSpace}/${override.viewExternalId}"`,
       );
     }
 
     if (field.cogniteType !== "json") {
       throw new Error(
-        `JSON types config error: property "${override.property}" in view "${override.space}/${override.view}" ` +
+        `JSON types config error: property "${override.viewProperty}" in view "${override.viewSpace}/${override.viewExternalId}" ` +
           `is of type "${field.cogniteType}", not "json"`,
       );
     }
 
-    field.mappedType = override.type;
+    field.mappedType = override.expectedType;
   }
 }
 
