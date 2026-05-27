@@ -32,8 +32,8 @@ export type Metadata = { key: string; value: number };
 export type Coordinates = { lat: number; lng: number };
 
 export const jsonPropertyTypes = [
-  { space: "my_space", view: "MyView", property: "metadata", type: "Metadata" },
-  { space: "my_space", view: "MyView", property: "location", type: "Coordinates" },
+  { viewSpace: "my_space", viewExternalId: "MyView", viewProperty: "metadata", expectedType: "Metadata" },
+  { viewSpace: "my_space", viewExternalId: "MyView", viewProperty: "location", expectedType: "Coordinates" },
 ] as const;
 `,
     );
@@ -42,10 +42,10 @@ export const jsonPropertyTypes = [
 
     expect(result.overrides).toHaveLength(2);
     expect(result.overrides[0]).toEqual({
-      space: "my_space",
-      view: "MyView",
-      property: "metadata",
-      type: "Metadata",
+      viewSpace: "my_space",
+      viewExternalId: "MyView",
+      viewProperty: "metadata",
+      expectedType: "Metadata",
     });
     expect(result.typeDeclarations.has("Metadata")).toBe(true);
     expect(result.typeDeclarations.has("Coordinates")).toBe(true);
@@ -62,7 +62,7 @@ export interface Config {
 }
 
 export const jsonPropertyTypes = [
-  { space: "s", view: "V", property: "config", type: "Config" },
+  { viewSpace: "s", viewExternalId: "V", viewProperty: "config", expectedType: "Config" },
 ] as const;
 `,
     );
@@ -83,7 +83,7 @@ export const jsonPropertyTypes = [
 export type Metadata = { key: string };
 
 export const jsonPropertyTypes = [
-  { space: "s", view: "V", property: "p", type: "NonExistent" },
+  { viewSpace: "s", viewExternalId: "V", viewProperty: "p", expectedType: "NonExistent" },
 ] as const;
 `,
     );
@@ -111,13 +111,13 @@ export const jsonPropertyTypes = [] as const;
       `
 export type Foo = { x: number };
 export const jsonPropertyTypes = [
-  { space: "s", view: "V", type: "Foo" },
+  { viewSpace: "s", viewExternalId: "V", expectedType: "Foo" },
 ] as const;
 `,
     );
 
     expect(() => parseJsonTypesFile(filePath)).toThrow(
-      'must have "space", "view", "property", and "type"',
+      'must have "viewSpace", "viewExternalId", "viewProperty", and "expectedType"',
     );
   });
 
@@ -128,7 +128,7 @@ export const jsonPropertyTypes = [
 export type Data = { value: string };
 
 export const jsonPropertyTypes = [
-  { space: "s", view: "V", property: "data", type: "Data" },
+  { viewSpace: "s", viewExternalId: "V", viewProperty: "data", expectedType: "Data" },
 ];
 `,
     );

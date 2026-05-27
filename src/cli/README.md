@@ -193,17 +193,17 @@ export type GeoCoordinates = {
 };
 
 export const jsonPropertyTypes = [
-  { space: "my_space", view: "Sensor", property: "metadata", type: "SensorMetadata" },
-  { space: "my_space", view: "Sensor", property: "location", type: "GeoCoordinates" },
-  { space: "my_space", view: "Facility", property: "coordinates", type: "GeoCoordinates" },
+  { viewSpace: "my_space", viewExternalId: "Sensor", viewProperty: "metadata", expectedType: "SensorMetadata" },
+  { viewSpace: "my_space", viewExternalId: "Sensor", viewProperty: "location", expectedType: "GeoCoordinates" },
+  { viewSpace: "my_space", viewExternalId: "Facility", viewProperty: "coordinates", expectedType: "GeoCoordinates" },
 ] as const;
 ```
 
 ### Rules
 
-- Each entry in `jsonPropertyTypes` must have `space`, `view`, `property`, and `type` fields.
-- `space` and `view` identify the Cognite view (by space and externalId). No version needed.
-- `property` is the original property name in Cognite (not the camelCase field name).
-- `type` must reference an exported type or interface from the same file.
+- Each entry in `jsonPropertyTypes` must have `viewSpace`, `viewExternalId`, `viewProperty`, and `expectedType` fields.
+- `viewSpace` and `viewExternalId` identify the Cognite view (by space and externalId). No version needed.
+- `viewProperty` is the original property name in Cognite (not the camelCase field name).
+- `expectedType` must reference an exported type or interface from the same file.
 - The referenced property must exist in the data model and be of type `json`. The generator will error otherwise.
 - Types are copied verbatim into the generated `types.ts` — no import from the config file at runtime.

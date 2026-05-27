@@ -77,7 +77,7 @@ function processMappedProperty(
     originalName: propertyName,
     cogniteType,
     mappedType,
-    isNullable: true, // Cognite SDK doesn't expose nullable in this type; default to true
+    isNullable: prop.nullable !== false,
     isList,
     isRelation,
     isEdge: false,
