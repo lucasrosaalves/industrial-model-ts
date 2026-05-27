@@ -86,7 +86,12 @@ describe("generateFromDefinitions", () => {
         ["SensorMetadata", "export type SensorMetadata = { unit: string; precision: number };"],
       ]),
       overrides: [
-        { space: "my_space", view: "Sensor", property: "metadata", type: "SensorMetadata" },
+        {
+          viewSpace: "my_space",
+          viewExternalId: "Sensor",
+          viewProperty: "metadata",
+          expectedType: "SensorMetadata",
+        },
       ],
     };
 

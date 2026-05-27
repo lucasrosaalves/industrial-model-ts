@@ -18,6 +18,7 @@ export interface ViewPropertyDefinition {
   container: unknown;
   containerPropertyIdentifier: string;
   type: ViewPropertyType;
+  nullable?: boolean;
 }
 
 export interface ReverseDirectRelationConnection {
