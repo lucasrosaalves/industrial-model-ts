@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.11.2
+
+### Patch Changes
+
+- ec286aa: Remove unnecessary reserved words escaping and enum name clash
+
 ## 0.11.1
 
 ### Patch Changes
