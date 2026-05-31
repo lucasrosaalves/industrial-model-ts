@@ -54,7 +54,7 @@ export function getInterfaceType(field: FieldDefinition, viewName?: string): str
 /** Generated type alias name for an enum field */
 export function getEnumTypeName(viewName: string, field: FieldDefinition): string {
   const capitalized = field.fieldName.charAt(0).toUpperCase() + field.fieldName.slice(1);
-  return `${viewName}${capitalized}`;
+  return `${viewName}_${capitalized}`;
 }
 
 /** TypeScript type for a field in the Relations type param */

@@ -14,7 +14,7 @@ import {
   isReverseDirectRelation,
   isViewPropertyDefinition,
 } from "../../utils";
-import { reservedWords, typeMappings } from "./constants";
+import { typeMappings } from "./constants";
 import { toCamel, toPascal } from "./helpers";
 import type { FieldDefinition, ViewDefinition } from "./models";
 
@@ -27,9 +27,6 @@ function parseView(view: CogniteViewDefinition): ViewDefinition {
 
   for (const [propertyName, prop] of Object.entries(view.properties)) {
     let fieldName = toCamel(propertyName);
-    if (reservedWords.has(fieldName)) {
-      fieldName = `${fieldName}_`;
-    }
 
     if (isViewPropertyDefinition(prop)) {
       fields.push(processMappedProperty(propertyName, fieldName, prop));
