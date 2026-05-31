@@ -26,7 +26,7 @@ function parseView(view: CogniteViewDefinition): ViewDefinition {
   const fields: FieldDefinition[] = [];
 
   for (const [propertyName, prop] of Object.entries(view.properties)) {
-    let fieldName = toCamel(propertyName);
+    const fieldName = toCamel(propertyName);
 
     if (isViewPropertyDefinition(prop)) {
       fields.push(processMappedProperty(propertyName, fieldName, prop));

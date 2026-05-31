@@ -222,14 +222,14 @@ describe("renderTypes", () => {
     const output = renderTypes(mockViews, mockConfig);
 
     expect(output).toContain(
-      'export type EquipmentStatus = "RUNNING" | "STOPPED" | "MAINTENANCE";',
+      'export type Equipment_Status = "RUNNING" | "STOPPED" | "MAINTENANCE";',
     );
   });
 
   it("uses enum type alias in the interface field", () => {
     const output = renderTypes(mockViews, mockConfig);
 
-    expect(output).toContain("status?: EquipmentStatus;");
+    expect(output).toContain("status?: Equipment_Status;");
   });
 });
 
