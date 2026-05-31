@@ -111,7 +111,7 @@ describe("parseViews", () => {
           isRelation: false,
         }),
         expect.objectContaining({
-          fieldName: "class_",
+          fieldName: "class",
           originalName: "class",
           cogniteType: "direct",
           mappedType: "NodeId",
