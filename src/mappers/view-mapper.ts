@@ -84,12 +84,15 @@ export class ViewMapper {
 
     if (pending.size === 0) return;
 
+    const sizeBefore = views.size;
     const fetched = await this.cognite.retrieveViews(Array.from(pending.values()));
     for (const view of fetched.items) {
       views.set(view.externalId, view);
     }
 
-    await this.loadDependencyViews(views);
+    if (views.size > sizeBefore) {
+      await this.loadDependencyViews(views);
+    }
   }
 }
 
