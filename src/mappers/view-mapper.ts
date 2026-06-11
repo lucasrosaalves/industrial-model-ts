@@ -1,5 +1,16 @@
-import type { CognitePort, ViewDefinition } from "../cognite";
+import type {
+  CognitePort,
+  ViewDefinition,
+  ViewDefinitionProperty,
+  ViewReference,
+} from "../cognite";
 import type { DataModelId } from "../types";
+import {
+  getDirectRelationSource,
+  isEdgeConnection,
+  isReverseDirectRelation,
+  isViewPropertyDefinition,
+} from "../utils/view";
 
 export class ViewMapper {
   private cachePromise: Promise<Map<string, ViewDefinition>> | null = null;
@@ -53,6 +64,48 @@ export class ViewMapper {
     for (const view of dm.views ?? []) {
       views.set(view.externalId, view);
     }
+
+    await this.loadDependencyViews(views);
     return views;
   }
+
+  private async loadDependencyViews(views: Map<string, ViewDefinition>): Promise<void> {
+    const pending = new Map<string, ViewReference>();
+
+    for (const view of views.values()) {
+      for (const property of Object.values(view.properties)) {
+        for (const ref of collectPropertyRefs(property)) {
+          if (!views.has(ref.externalId) && !pending.has(ref.externalId)) {
+            pending.set(ref.externalId, ref);
+          }
+        }
+      }
+    }
+
+    if (pending.size === 0) return;
+
+    const sizeBefore = views.size;
+    const fetched = await this.cognite.retrieveViews(Array.from(pending.values()));
+    for (const view of fetched.items) {
+      views.set(view.externalId, view);
+    }
+
+    if (views.size > sizeBefore) {
+      await this.loadDependencyViews(views);
+    }
+  }
+}
+
+function collectPropertyRefs(property: ViewDefinitionProperty): ViewReference[] {
+  if (isViewPropertyDefinition(property)) {
+    const source = getDirectRelationSource(property);
+    return source ? [source] : [];
+  }
+  if (isReverseDirectRelation(property)) {
+    return [property.source, property.through.source];
+  }
+  if (isEdgeConnection(property)) {
+    return [property.source];
+  }
+  return [];
 }

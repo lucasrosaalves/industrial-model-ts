@@ -18,8 +18,24 @@ import { typeMappings } from "./constants";
 import { toCamel, toPascal } from "./helpers";
 import type { FieldDefinition, ViewDefinition } from "./models";
 
-export function parseViews(views: CogniteViewDefinition[]): ViewDefinition[] {
-  return views.sort((a, b) => a.externalId.localeCompare(b.externalId)).map(parseView);
+export function parseViews(
+  views: CogniteViewDefinition[],
+  knownExternalIds?: Set<string>,
+): ViewDefinition[] {
+  const available = knownExternalIds ?? new Set(views.map((v) => v.externalId));
+  const parsed = views.sort((a, b) => a.externalId.localeCompare(b.externalId)).map(parseView);
+
+  for (const view of parsed) {
+    for (const field of view.fields) {
+      if (field.relationTargetExternalId && !available.has(field.relationTargetExternalId)) {
+        field.relationTarget = null;
+        field.relationTargetSpace = null;
+        field.relationTargetExternalId = null;
+      }
+    }
+  }
+
+  return parsed;
 }
 
 function parseView(view: CogniteViewDefinition): ViewDefinition {

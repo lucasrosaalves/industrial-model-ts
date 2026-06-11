@@ -42,6 +42,7 @@ export function makeCogniteMock(
 ): CognitePort {
   return {
     retrieveDataModels: vi.fn().mockResolvedValue(response),
+    retrieveViews: vi.fn().mockResolvedValue({ items: [] }),
     queryInstances: vi.fn(),
     searchInstances: vi.fn(),
     aggregateInstances: vi.fn(),

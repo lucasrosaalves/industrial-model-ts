@@ -54,7 +54,7 @@ export async function promptAuth(flags: AuthOptions): Promise<{
     flags.baseUrl ||
     (await input({
       message: "CDF base URL:",
-      default: extracted.baseUrl || "https://az-eastus-1.cognitedata.com",
+      default: extracted.baseUrl || "https://az-phx-001.cognitedata.com",
     }));
 
   return { token, project, baseUrl };
