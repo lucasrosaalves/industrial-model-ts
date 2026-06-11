@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.11.3
+
+### Patch Changes
+
+- 2c7cd85: including dependency views on the cache
+
 ## 0.11.2
 
 ### Patch Changes
