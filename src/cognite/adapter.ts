@@ -44,11 +44,7 @@ class CogniteSdkAdapter implements CognitePort {
     ids: Array<{ space: string; externalId: string; version: string }>,
   ): Promise<{ items: ViewDefinition[] }> {
     const cleanIds = ids.map(({ space, externalId, version }) => ({ space, externalId, version }));
-    const response = await (
-      this.client as unknown as {
-        views: { retrieve: (ids: unknown) => Promise<{ items: unknown[] }> };
-      }
-    ).views.retrieve(cleanIds);
+    const response = await this.client.views.retrieve(cleanIds);
     return { items: response.items as ViewDefinition[] };
   }
 
