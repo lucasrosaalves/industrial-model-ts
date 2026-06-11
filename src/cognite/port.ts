@@ -18,6 +18,7 @@ import type {
   InstancesQueryResponse,
   InstancesSearchRequest,
   InstancesSearchResponse,
+  ViewDefinition,
 } from "./types";
 
 export interface CognitePort {
@@ -25,6 +26,10 @@ export interface CognitePort {
     ids: DataModelId[],
     options?: DataModelRetrieveOptions,
   ): Promise<{ items: DataModelRetrieveItem[] }>;
+
+  retrieveViews(
+    ids: Array<{ space: string; externalId: string; version: string }>,
+  ): Promise<{ items: ViewDefinition[] }>;
 
   queryInstances(request: InstancesQueryRequest): Promise<InstancesQueryResponse>;
 

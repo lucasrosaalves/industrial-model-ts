@@ -40,6 +40,18 @@ class CogniteSdkAdapter implements CognitePort {
     };
   }
 
+  async retrieveViews(
+    ids: Array<{ space: string; externalId: string; version: string }>,
+  ): Promise<{ items: ViewDefinition[] }> {
+    const cleanIds = ids.map(({ space, externalId, version }) => ({ space, externalId, version }));
+    const response = await (
+      this.client as unknown as {
+        views: { retrieve: (ids: unknown) => Promise<{ items: unknown[] }> };
+      }
+    ).views.retrieve(cleanIds);
+    return { items: response.items as ViewDefinition[] };
+  }
+
   async queryInstances(request: InstancesQueryRequest): Promise<InstancesQueryResponse> {
     const response = await this.client.instances.query(
       request as Parameters<CogniteClient["instances"]["query"]>[0],

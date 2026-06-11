@@ -3,10 +3,46 @@ import type { CognitePort, ViewDefinition } from "../src/cognite";
 import { ViewMapper } from "../src/mappers/view-mapper";
 import { createViewMapper, getCogniteCoreView, makeCogniteWithViews } from "./fixtures/index.js";
 
+function makeViewWithDirectRelation(externalId: string, relatedExternalId: string): ViewDefinition {
+  return {
+    space: "sp",
+    externalId,
+    version: "v1",
+    properties: {
+      related: {
+        container: {},
+        containerPropertyIdentifier: "related",
+        type: {
+          type: "direct",
+          source: { type: "view", space: "sp", externalId: relatedExternalId, version: "v1" },
+        },
+      },
+    },
+  };
+}
+
 const DATA_MODEL = { space: "sp", externalId: "DM", version: "v1" };
 
 function makeView(externalId: string): ViewDefinition {
   return { space: "sp", externalId, version: "v1", properties: {} };
+}
+
+function makeMinimalCognitePort(overrides: Partial<CognitePort> = {}): CognitePort {
+  return {
+    retrieveDataModels: vi.fn().mockResolvedValue({ items: [] }),
+    retrieveViews: vi.fn().mockResolvedValue({ items: [] }),
+    queryInstances: vi.fn(),
+    searchInstances: vi.fn(),
+    aggregateInstances: vi.fn(),
+    applyInstances: vi.fn(),
+    retrieveDatapoints: vi.fn(),
+    retrieveLatestDatapoints: vi.fn(),
+    insertDatapoints: vi.fn(),
+    deleteDatapoints: vi.fn(),
+    uploadFile: vi.fn(),
+    getFileDownloadUrls: vi.fn(),
+    ...overrides,
+  };
 }
 
 function makeCognite(views: ViewDefinition[], createdTime = 1000): CognitePort {
@@ -35,37 +71,13 @@ describe("ViewMapper", () => {
   });
 
   it("throws when the data model is not found", async () => {
-    const cognite: CognitePort = {
-      retrieveDataModels: vi.fn().mockResolvedValue({ items: [] }),
-      queryInstances: vi.fn(),
-      searchInstances: vi.fn(),
-      aggregateInstances: vi.fn(),
-      applyInstances: vi.fn(),
-      retrieveDatapoints: vi.fn(),
-      retrieveLatestDatapoints: vi.fn(),
-      insertDatapoints: vi.fn(),
-      deleteDatapoints: vi.fn(),
-      uploadFile: vi.fn(),
-      getFileDownloadUrls: vi.fn(),
-    };
+    const cognite = makeMinimalCognitePort();
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     await expect(mapper.getView("ViewA")).rejects.toThrow("not found");
   });
 
   it("throws from getViews when the data model is not found", async () => {
-    const cognite: CognitePort = {
-      retrieveDataModels: vi.fn().mockResolvedValue({ items: [] }),
-      queryInstances: vi.fn(),
-      searchInstances: vi.fn(),
-      aggregateInstances: vi.fn(),
-      applyInstances: vi.fn(),
-      retrieveDatapoints: vi.fn(),
-      retrieveLatestDatapoints: vi.fn(),
-      insertDatapoints: vi.fn(),
-      deleteDatapoints: vi.fn(),
-      getFileDownloadUrls: vi.fn(),
-      uploadFile: vi.fn(),
-    };
+    const cognite = makeMinimalCognitePort();
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     await expect(mapper.getViews()).rejects.toThrow("not found");
   });
@@ -106,24 +118,14 @@ describe("ViewMapper", () => {
   });
 
   it("selects the most recently created data model when multiple are returned", async () => {
-    const cognite: CognitePort = {
+    const cognite = makeMinimalCognitePort({
       retrieveDataModels: vi.fn().mockResolvedValue({
         items: [
           { views: [makeView("OldView")], createdTime: 1000 },
           { views: [makeView("NewView")], createdTime: 2000 },
         ],
       }),
-      queryInstances: vi.fn(),
-      searchInstances: vi.fn(),
-      aggregateInstances: vi.fn(),
-      applyInstances: vi.fn(),
-      retrieveDatapoints: vi.fn(),
-      retrieveLatestDatapoints: vi.fn(),
-      insertDatapoints: vi.fn(),
-      deleteDatapoints: vi.fn(),
-      uploadFile: vi.fn(),
-      getFileDownloadUrls: vi.fn(),
-    };
+    });
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     const view = await mapper.getView("NewView");
     expect(view.externalId).toBe("NewView");
@@ -131,24 +133,14 @@ describe("ViewMapper", () => {
   });
 
   it("returns views from the most recently created data model", async () => {
-    const cognite: CognitePort = {
+    const cognite = makeMinimalCognitePort({
       retrieveDataModels: vi.fn().mockResolvedValue({
         items: [
           { views: [makeView("OldView")], createdTime: 1000 },
           { views: [makeView("NewView")], createdTime: 2000 },
         ],
       }),
-      queryInstances: vi.fn(),
-      searchInstances: vi.fn(),
-      aggregateInstances: vi.fn(),
-      applyInstances: vi.fn(),
-      retrieveDatapoints: vi.fn(),
-      retrieveLatestDatapoints: vi.fn(),
-      insertDatapoints: vi.fn(),
-      deleteDatapoints: vi.fn(),
-      uploadFile: vi.fn(),
-      getFileDownloadUrls: vi.fn(),
-    };
+    });
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     const views = await mapper.getViews();
     expect(views.map((view) => view.externalId)).toEqual(["NewView"]);
@@ -160,5 +152,52 @@ describe("ViewMapper", () => {
     const expected = getCogniteCoreView("CogniteAsset");
     expect(view.externalId).toBe(expected.externalId);
     expect(view.properties.parent).toBeDefined();
+  });
+
+  it("loads a dependency view referenced by a direct relation property", async () => {
+    const depView = makeView("DepView");
+    const mainView = makeViewWithDirectRelation("MainView", "DepView");
+    const cognite = makeMinimalCognitePort({
+      retrieveDataModels: vi
+        .fn()
+        .mockResolvedValue({ items: [{ views: [mainView], createdTime: 1000 }] }),
+      retrieveViews: vi.fn().mockResolvedValue({ items: [depView] }),
+    });
+    const mapper = new ViewMapper(cognite, DATA_MODEL);
+    const dep = await mapper.getView("DepView");
+    expect(dep.externalId).toBe("DepView");
+  });
+
+  it("does not call retrieveViews when all referenced views are already in the data model", async () => {
+    const viewA = makeViewWithDirectRelation("ViewA", "ViewB");
+    const viewB = makeView("ViewB");
+    const cognite = makeMinimalCognitePort({
+      retrieveDataModels: vi
+        .fn()
+        .mockResolvedValue({ items: [{ views: [viewA, viewB], createdTime: 1000 }] }),
+      retrieveViews: vi.fn().mockResolvedValue({ items: [] }),
+    });
+    const mapper = new ViewMapper(cognite, DATA_MODEL);
+    await mapper.getView("ViewB");
+    expect((cognite.retrieveViews as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
+  });
+
+  it("loads transitive dependency views recursively", async () => {
+    const viewA = makeViewWithDirectRelation("ViewA", "ViewB");
+    const viewB = makeViewWithDirectRelation("ViewB", "ViewC");
+    const viewC = makeView("ViewC");
+    const retrieveViews = vi
+      .fn()
+      .mockResolvedValueOnce({ items: [viewB] })
+      .mockResolvedValueOnce({ items: [viewC] });
+    const cognite = makeMinimalCognitePort({
+      retrieveDataModels: vi
+        .fn()
+        .mockResolvedValue({ items: [{ views: [viewA], createdTime: 1000 }] }),
+      retrieveViews,
+    });
+    const mapper = new ViewMapper(cognite, DATA_MODEL);
+    await mapper.getView("ViewC");
+    expect(retrieveViews.mock.calls).toHaveLength(2);
   });
 });
