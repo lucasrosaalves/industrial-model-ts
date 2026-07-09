@@ -1,3 +1,4 @@
+import type { ViewsCache } from "../cache/views-cache";
 import type {
   CognitePort,
   ViewDefinition,
@@ -18,6 +19,7 @@ export class ViewMapper {
   constructor(
     private readonly cognite: CognitePort,
     private readonly dataModelId: DataModelId,
+    private readonly viewsCache?: ViewsCache,
   ) {}
 
   async getView(externalId: string): Promise<ViewDefinition> {
@@ -44,6 +46,12 @@ export class ViewMapper {
   }
 
   private async fetchViews(): Promise<Map<string, ViewDefinition>> {
+    const cacheKey = this.getCacheKey();
+    const cached = await this.viewsCache?.get(cacheKey);
+    if (cached) {
+      return new Map(cached.map((view) => [view.externalId, view]));
+    }
+
     const response = await this.cognite.retrieveDataModels(
       [
         {
@@ -66,7 +74,12 @@ export class ViewMapper {
     }
 
     await this.loadDependencyViews(views);
+    await this.viewsCache?.set(cacheKey, Array.from(views.values()));
     return views;
+  }
+
+  private getCacheKey(): string {
+    return `${this.dataModelId.space}/${this.dataModelId.externalId}/${this.dataModelId.version}`;
   }
 
   private async loadDependencyViews(views: Map<string, ViewDefinition>): Promise<void> {

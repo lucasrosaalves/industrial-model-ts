@@ -68,6 +68,25 @@ export function makeCogniteWithViews(views: ViewDefinition[], createdTime = 1000
   return makeCogniteMock(makeRetrieveDataModelsResponse(views, createdTime));
 }
 
+/** In-memory `Storage` implementation for stubbing `localStorage`/`sessionStorage` in tests. */
+export function makeMemoryStorage(): Storage {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key: string) => store.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      store.set(key, value);
+    },
+    removeItem: (key: string) => {
+      store.delete(key);
+    },
+    clear: () => store.clear(),
+    key: () => null,
+    get length() {
+      return store.size;
+    },
+  } as Storage;
+}
+
 /** Mock CogniteClient backed by in-memory fixture data (no network calls). */
 export function makeCogniteClientMock(options?: {
   queryItems?: QueryResultMap;

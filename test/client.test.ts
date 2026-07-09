@@ -1,4 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { clearInMemoryViewsCache } from "../src/cache/views-cache.js";
 import type { NodeDefinition } from "../src/cognite/index.js";
 import { type IndustrialModel, IndustrialModelClient, type NodeId } from "../src/index.js";
 import type { AggregateDefinition } from "../src/types.js";
@@ -14,9 +15,18 @@ import {
   makeCogniteVolumeAggregateByTypeResponse,
   makeCogniteVolumeGroupByObject3DResponse,
   makeCogniteVolumeNumericAggregateResponse,
+  makeMemoryStorage,
 } from "./fixtures/index.js";
 
 describe("IndustrialModelClient", () => {
+  // `useSessionCache` defaults to true, and falls back to a process-wide in-memory
+  // cache when `sessionStorage` isn't available (as in these Node.js tests). Reset
+  // it between tests so client instances across different `it` blocks don't share
+  // cached views for the same COGNITE_CORE_DATA_MODEL key.
+  beforeEach(() => {
+    clearInMemoryViewsCache();
+  });
+
   it("is exported", () => {
     expect(IndustrialModelClient).toBeDefined();
   });
@@ -990,5 +1000,71 @@ describe("IndustrialModelClient", () => {
         select: { name: true, sourceCreatedTime: true },
       }),
     ).rejects.toThrow(/Invalid query result/);
+  });
+
+  describe("useSessionCache", () => {
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it("shares fetched views across client instances via sessionStorage by default", async () => {
+      vi.stubGlobal("sessionStorage", makeMemoryStorage());
+      const client = makeCogniteClientMock({ queryItems: makeCogniteAssetQueryResult() });
+
+      const first = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+      await first.query<IndustrialModel<{ name: string }>>()({
+        viewExternalId: "CogniteAsset",
+        select: { name: true },
+      });
+
+      const second = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+      await second.query<IndustrialModel<{ name: string }>>()({
+        viewExternalId: "CogniteAsset",
+        select: { name: true },
+      });
+
+      expect(client.dataModels.retrieve).toHaveBeenCalledOnce();
+    });
+
+    it("does not use sessionStorage when useSessionCache is false", async () => {
+      vi.stubGlobal("sessionStorage", makeMemoryStorage());
+      const client = makeCogniteClientMock({ queryItems: makeCogniteAssetQueryResult() });
+
+      const first = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, {
+        useSessionCache: false,
+      });
+      await first.query<IndustrialModel<{ name: string }>>()({
+        viewExternalId: "CogniteAsset",
+        select: { name: true },
+      });
+
+      const second = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, {
+        useSessionCache: false,
+      });
+      await second.query<IndustrialModel<{ name: string }>>()({
+        viewExternalId: "CogniteAsset",
+        select: { name: true },
+      });
+
+      expect(client.dataModels.retrieve).toHaveBeenCalledTimes(2);
+    });
+
+    it("falls back to an in-memory cache without sessionStorage (e.g. Node.js), shared across instances", async () => {
+      const client = makeCogniteClientMock({ queryItems: makeCogniteAssetQueryResult() });
+
+      const first = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+      await first.query<IndustrialModel<{ name: string }>>()({
+        viewExternalId: "CogniteAsset",
+        select: { name: true },
+      });
+
+      const second = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+      await second.query<IndustrialModel<{ name: string }>>()({
+        viewExternalId: "CogniteAsset",
+        select: { name: true },
+      });
+
+      expect(client.dataModels.retrieve).toHaveBeenCalledOnce();
+    });
   });
 });

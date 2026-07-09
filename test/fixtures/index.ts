@@ -15,6 +15,7 @@ export {
   makeCogniteClientMock,
   makeCogniteMock,
   makeCogniteWithViews,
+  makeMemoryStorage,
   makeRetrieveDataModelsResponse,
   type RetrieveDataModelsResponse,
 } from "./cognite-core.js";

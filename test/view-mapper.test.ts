@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { ViewsCache } from "../src/cache/views-cache";
 import type { CognitePort, ViewDefinition } from "../src/cognite";
 import { ViewMapper } from "../src/mappers/view-mapper";
 import { createViewMapper, getCogniteCoreView, makeCogniteWithViews } from "./fixtures/index.js";
@@ -199,5 +200,30 @@ describe("ViewMapper", () => {
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     await mapper.getView("ViewC");
     expect(retrieveViews.mock.calls).toHaveLength(2);
+  });
+
+  it("uses a cached views result instead of calling the API", async () => {
+    const cognite = makeCognite([makeView("ViewA")]);
+    const retrieve = cognite.retrieveDataModels as ReturnType<typeof vi.fn>;
+    const cache: ViewsCache = {
+      get: vi.fn().mockResolvedValue([makeView("CachedView")]),
+      set: vi.fn().mockResolvedValue(undefined),
+    };
+    const mapper = new ViewMapper(cognite, DATA_MODEL, cache);
+    const view = await mapper.getView("CachedView");
+    expect(view.externalId).toBe("CachedView");
+    expect(retrieve.mock.calls).toHaveLength(0);
+  });
+
+  it("stores the fetched views (including dependencies) in the cache, keyed by data model", async () => {
+    const cognite = makeCognite([makeView("ViewA")]);
+    const cache: ViewsCache = {
+      get: vi.fn().mockResolvedValue(undefined),
+      set: vi.fn().mockResolvedValue(undefined),
+    };
+    const mapper = new ViewMapper(cognite, DATA_MODEL, cache);
+    await mapper.getViews();
+    expect(cache.get).toHaveBeenCalledWith("sp/DM/v1");
+    expect(cache.set).toHaveBeenCalledWith("sp/DM/v1", [makeView("ViewA")]);
   });
 });

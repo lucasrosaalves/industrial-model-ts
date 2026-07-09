@@ -16,6 +16,12 @@ export type QueryResultMap = Record<string, NodeOrEdge[]>;
 
 export type IndustrialModelClientOptions = {
   validateResults?: boolean;
+  /**
+   * Caches the data model's views to avoid refetching them on every client instantiation.
+   * Only takes effect in browser environments (uses `sessionStorage`, scoped to the current
+   * tab); a no-op under Node.js. Defaults to `true`.
+   */
+  useSessionCache?: boolean;
 };
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};

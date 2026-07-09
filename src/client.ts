@@ -1,4 +1,5 @@
 import type { CogniteClient } from "@cognite/sdk";
+import { createSessionStorageViewsCache } from "./cache/views-cache";
 import {
   type CognitePort,
   createCogniteAdapter,
@@ -66,7 +67,9 @@ export class IndustrialModelClient {
   ) {
     const cognite = createCogniteAdapter(client);
     this.cognite = cognite;
-    const viewMapper = new ViewMapper(cognite, dataModelId);
+    const useSessionCache = options.useSessionCache ?? true;
+    const viewsCache = useSessionCache ? createSessionStorageViewsCache() : undefined;
+    const viewMapper = new ViewMapper(cognite, dataModelId, viewsCache);
     this.queryMapper = new QueryMapper(viewMapper, cognite);
     this.aggregateMapper = new AggregateMapper(viewMapper, cognite);
     this.upsertMapper = new UpsertMapper(viewMapper, cognite);
