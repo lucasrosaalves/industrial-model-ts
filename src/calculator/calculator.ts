@@ -110,12 +110,27 @@ export class Calculator {
     }
 
     const values = evaluate(query.formula, valuesMap);
+
+    const inputs: Record<string, Series> = {};
+    aliases.forEach((alias, index) => {
+      inputs[alias] = series[index] as Series;
+    });
+    for (const parameter of query.parameters) {
+      if (isConstantParameter(parameter)) {
+        inputs[parameter.alias] = timestamps.map((timestamp) => ({
+          timestamp,
+          value: parameter.value,
+        }));
+      }
+    }
+
     return {
       query,
       datapoints: timestamps.map((timestamp, index) => ({
         timestamp,
         value: values[index] as number,
       })),
+      inputs,
     };
   }
 

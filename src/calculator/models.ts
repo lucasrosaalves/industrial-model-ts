@@ -1,6 +1,9 @@
 import type { DatapointAggregate, NodeId } from "../types";
 
-/** A single computed datapoint of a calculation result. */
+/**
+ * A timestamped numeric value. Used both for the formula result
+ * (`datapoints`) and for each aligned input series (`inputs`).
+ */
 export type DataPoint = {
   timestamp: Date;
   value: number;
@@ -80,10 +83,20 @@ export type CalculatorQuery = {
   alignment?: AlignmentMode;
 };
 
-/** The datapoints produced by evaluating a `CalculatorQuery`. */
+/**
+ * The datapoints produced by evaluating a `CalculatorQuery`, plus the aligned
+ * parameter series the formula actually evaluated.
+ *
+ * `inputs[alias][i]` is the point used to compute `datapoints[i]`. These
+ * series are already in memory at evaluation time (after retrieval, any
+ * multi-series reduction, timestamp alignment, and constant broadcast), so
+ * returning them does not refetch from CDF.
+ */
 export type CalculationResult = {
   query: CalculatorQuery;
   datapoints: DataPoint[];
+  /** Aligned series used by the formula, keyed by parameter alias. */
+  inputs: Record<string, DataPoint[]>;
 };
 
 export function isConstantParameter(

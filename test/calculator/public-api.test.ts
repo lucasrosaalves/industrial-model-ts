@@ -66,9 +66,14 @@ describe("calculator public API", () => {
     const alignment: AlignmentMode = "intersect";
     const query: CalculatorQuery = { formula: "{A} + {B} + {C}", parameters, alignment };
     const series: Series = [{ timestamp: new Date(0), value: 1 } satisfies DataPoint];
-    const result: CalculationResult = { query, datapoints: series };
+    const result: CalculationResult = {
+      query,
+      datapoints: series,
+      inputs: { A: series, B: series, C: series },
+    };
 
     expect(result.query.parameters).toHaveLength(3);
     expect(result.datapoints).toHaveLength(1);
+    expect(Object.keys(result.inputs)).toEqual(["A", "B", "C"]);
   });
 });
