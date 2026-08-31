@@ -6,6 +6,7 @@ import {
   ParameterTimestampError,
 } from "../../src/calculator/formula-expression";
 import type {
+  CalculationResult,
   CalculatorParameter,
   CalculatorQuery,
   ConstantParameter,
@@ -87,6 +88,22 @@ function requestItems(cognite: CognitePort) {
   return vi.mocked(cognite.retrieveDatapoints).mock.calls[0]?.[0]?.items ?? [];
 }
 
+function inputValues(result: CalculationResult): Record<string, number[]> {
+  return Object.fromEntries(
+    Object.entries(result.inputs).map(([alias, series]) => [
+      alias,
+      series.map((point) => point.value),
+    ]),
+  );
+}
+
+function expectInputsShareResultTimestamps(result: CalculationResult): void {
+  const timestamps = result.datapoints.map((point) => point.timestamp);
+  for (const series of Object.values(result.inputs)) {
+    expect(series.map((point) => point.timestamp)).toEqual(timestamps);
+  }
+}
+
 describe("Calculator.calculate: happy paths", () => {
   it("returns evaluation result for simple formula", async () => {
     const { calculator } = makeCalculator([
@@ -165,7 +182,7 @@ describe("Calculator.calculate: happy paths", () => {
 
     const result = await calculator.calculate(input, START, END);
 
-    expect(result).toEqual({ query: input, datapoints: [] });
+    expect(result).toEqual({ query: input, datapoints: [], inputs: { A: [] } });
   });
 
   it("supports conditional formulas end-to-end", async () => {
@@ -501,7 +518,7 @@ describe("Calculator.calculate: multiple timeseries per parameter (reducers)", (
 
     const result = await calculator.calculate(input, START, END);
 
-    expect(result).toEqual({ query: input, datapoints: [] });
+    expect(result).toEqual({ query: input, datapoints: [], inputs: { A: [] } });
   });
 
   it("timestamps come from reduced series not raw leaf series", async () => {
@@ -640,7 +657,7 @@ describe("Calculator.calculate: timestamp alignment", () => {
 
     const result = await calculator.calculate(input, START, END);
 
-    expect(result).toEqual({ query: input, datapoints: [] });
+    expect(result).toEqual({ query: input, datapoints: [], inputs: { A: [], B: [] } });
   });
 
   it("strict alignment raises on mismatched series", async () => {
@@ -879,6 +896,142 @@ describe("Calculator.calculate: composition", () => {
       { timestamp: T0, value: 109 },
       { timestamp: T1, value: 22 },
     ]);
+  });
+});
+
+describe("Calculator.calculate: inputs (aligned values used by the formula)", () => {
+  it("are the series passed to the formula", async () => {
+    const { calculator } = makeCalculator([
+      makeSeries([
+        [T0, 1],
+        [T1, 2],
+        [T2, 3],
+      ]),
+    ]);
+
+    const result = await calculator.calculate(query("{A} * 2", [param(TS_A, "A")]), START, END);
+
+    expect(inputValues(result)).toEqual({ A: [1, 2, 3] });
+    expect(result.datapoints.map((point) => point.value)).toEqual([2, 4, 6]);
+    expectInputsShareResultTimestamps(result);
+  });
+
+  it("include every parameter at aligned indexes", async () => {
+    const { calculator } = makeCalculator([
+      makeSeries([
+        [T0, 10],
+        [T1, 20],
+      ]),
+      makeSeries([
+        [T0, 2],
+        [T1, 4],
+      ]),
+    ]);
+
+    const result = await calculator.calculate(
+      query("{A} / {B}", [param(TS_A, "A"), param(TS_B, "B")]),
+      START,
+      END,
+    );
+
+    expect(inputValues(result)).toEqual({ A: [10, 20], B: [2, 4] });
+    for (const [index, point] of result.datapoints.entries()) {
+      const a = result.inputs.A?.[index]?.value;
+      const b = result.inputs.B?.[index]?.value;
+      expect(a).toBeDefined();
+      expect(b).toBeDefined();
+      expect(point.value).toBe((a as number) / (b as number));
+    }
+    expectInputsShareResultTimestamps(result);
+  });
+
+  it("are the intersected values, not the raw series", async () => {
+    const { calculator } = makeCalculator([
+      makeSeries([
+        [T0, 1],
+        [T1, 2],
+        [T2, 3],
+      ]),
+      makeSeries([[T0, 10]]),
+    ]);
+
+    const result = await calculator.calculate(
+      query("{A} + {B}", [param(TS_A, "A"), param(TS_B, "B")]),
+      START,
+      END,
+    );
+
+    // Only the shared timestamp survives alignment, so inputs drop A's extra points.
+    expect(inputValues(result)).toEqual({ A: [1], B: [10] });
+    expect(result.datapoints.map((point) => point.value)).toEqual([11]);
+    expectInputsShareResultTimestamps(result);
+  });
+
+  it("broadcast constants to the aligned length", async () => {
+    const { calculator } = makeCalculator([
+      makeSeries([
+        [T0, 1],
+        [T1, 2],
+        [T2, 3],
+      ]),
+    ]);
+
+    const result = await calculator.calculate(
+      query("{A} + {B}", [param(TS_A, "A"), constant("B", 10)]),
+      START,
+      END,
+    );
+
+    expect(inputValues(result)).toEqual({ A: [1, 2, 3], B: [10, 10, 10] });
+    expectInputsShareResultTimestamps(result);
+  });
+
+  it("use the reduced series for multi timeseries", async () => {
+    const { calculator } = makeCalculator([
+      makeAggregateSeries("average", [
+        [T0, 1],
+        [T1, 2],
+      ]),
+      makeAggregateSeries("average", [
+        [T0, 10],
+        [T1, 20],
+      ]),
+    ]);
+
+    const result = await calculator.calculate(
+      query("{A}", [multiParam([TS_A, TS_B], "A", "sum")]),
+      START,
+      END,
+    );
+
+    expect(inputValues(result)).toEqual({ A: [11, 22] });
+    expect(result.datapoints.map((point) => point.value)).toEqual([11, 22]);
+    expectInputsShareResultTimestamps(result);
+  });
+
+  it("calculateMultiples inputs are scoped to each query", async () => {
+    const { calculator } = makeCalculator([
+      makeSeries([
+        [T0, 1],
+        [T1, 2],
+      ]),
+      makeSeries([
+        [T0, 10],
+        [T1, 20],
+      ]),
+    ]);
+
+    const results = await calculator.calculateMultiples(
+      [query("{A} * 2", [param(TS_A, "A")]), query("{B} + 1", [param(TS_B, "B")])],
+      START,
+      END,
+    );
+
+    expect(results).toHaveLength(2);
+    expect(inputValues(results[0] as CalculationResult)).toEqual({ A: [1, 2] });
+    expect(inputValues(results[1] as CalculationResult)).toEqual({ B: [10, 20] });
+    expectInputsShareResultTimestamps(results[0] as CalculationResult);
+    expectInputsShareResultTimestamps(results[1] as CalculationResult);
   });
 });
 

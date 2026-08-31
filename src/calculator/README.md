@@ -42,9 +42,14 @@ const result = await calculator.calculate(
 
 result.datapoints;
 // [{ timestamp: Date, value: number }, …]
+result.inputs;
+// { power: DataPoint[], flow: DataPoint[] } — aligned series used by the formula
+// result.inputs[alias][i] is the point used to compute result.datapoints[i]
 ```
 
 Every parameter must include a `type` tag (`"constant"`, `"single_timeseries"`, or `"multi_timeseries"`). A JSON payload that omits `type` is rejected.
+
+`result.query` is the exact `CalculatorQuery` that was passed in — handy when matching results back to their originating query after `calculateMultiples`. `result.inputs` is the aligned series that the formula actually evaluated: after retrieval, any `MultiTimeSeriesParameter` reduction, timestamp alignment, and constant broadcast. Each input series is a `DataPoint[]` sharing the same timestamps as `datapoints`; `inputs[alias][i]` is the point used to compute `datapoints[i]`. These series are already in memory at evaluation time, so returning them does not refetch from CDF.
 
 Timestamps in the result come from the **shared time axis** of the query's time-series parameters. By default (`alignment: "intersect"`) that axis is the intersection of their timestamps: a point is emitted only when every time-series parameter has a value at that exact timestamp. Set `alignment: "strict"` to require identical timestamps and raise `ParameterTimestampError` if they differ. `ConstantParameter` values don't participate in this alignment — they are broadcast to the resulting length.
 
@@ -406,8 +411,8 @@ When every referenced parameter is an empty series, the result is an empty array
 | `MultiTimeSeriesParameter` | `{ type: "multi_timeseries"; timeSeries: NodeId[]; alias: string; reducer: ReducerType; aggregateType?: DatapointAggregate; granularity?: string }` |
 | `ReducerType` | `"min" \| "max" \| "sum" \| "average"` |
 | `AlignmentMode` | `"intersect" \| "strict"` |
-| `CalculationResult` | `{ query: CalculatorQuery; datapoints: DataPoint[] }` |
-| `DataPoint` | `{ timestamp: Date; value: number }` |
+| `CalculationResult` | `{ query: CalculatorQuery; datapoints: DataPoint[]; inputs: Record<string, DataPoint[]> }`. `query` is the originating query; `datapoints` has one `DataPoint` per aligned index; `inputs` is the aligned parameter series the formula evaluated (`inputs[alias][i]` was used to compute `datapoints[i]`). |
+| `DataPoint` | `{ timestamp: Date; value: number }`. Used both for the formula result (`datapoints`) and for each aligned input series. |
 
 ### Validation
 
