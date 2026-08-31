@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.15.0
+
+### Minor Changes
+
+- 4c228a6: Add `inputs` to `CalculationResult` with the aligned series the formula evaluated, keyed by parameter alias.
+
 ## 0.14.0
 
 ### Minor Changes
