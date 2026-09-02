@@ -216,9 +216,17 @@ export type QueryExecutor<TModel> = {
 
 type GroupableValue<T> = [NonNull<T>] extends [NodeId]
   ? true
-  : [NonNull<T>] extends [string | number | boolean]
+  : [NonNull<T>] extends [readonly NodeId[]]
     ? true
-    : false;
+    : [NonNull<T>] extends [string | number | boolean]
+      ? true
+      : [NonNull<T>] extends [readonly string[]]
+        ? true
+        : [NonNull<T>] extends [readonly number[]]
+          ? true
+          : [NonNull<T>] extends [readonly boolean[]]
+            ? true
+            : false;
 
 export type GroupByKey<TModel> = {
   [K in keyof ModelProps<TModel>]: GroupableValue<ModelProps<TModel>[K]> extends true ? K : never;
@@ -229,10 +237,18 @@ export type AggregateGroupBy<TModel> = {
 };
 
 export type NumericKey<TModel> = {
-  [K in keyof ModelProps<TModel>]: ModelProps<TModel>[K] extends number ? K : never;
+  [K in keyof ModelProps<TModel>]: [NonNull<ModelProps<TModel>[K]>] extends [number] ? K : never;
 }[keyof ModelProps<TModel>];
 
-export type CountableKey<TModel> = GroupByKey<TModel> | "externalId" | "space";
+type ScalarGroupByKey<TModel> = {
+  [K in keyof ModelProps<TModel>]: GroupableValue<ModelProps<TModel>[K]> extends true
+    ? [NonNull<ModelProps<TModel>[K]>] extends [readonly unknown[]]
+      ? never
+      : K
+    : never;
+}[keyof ModelProps<TModel>];
+
+export type CountableKey<TModel> = ScalarGroupByKey<TModel> | "externalId" | "space";
 
 export type AggregateDefinition<TModel> =
   | { avg: NumericKey<TModel> }
@@ -248,40 +264,94 @@ type SelectedGroupKeys<TGroupBy> = Extract<
   string
 >;
 
+/** Cognite explodes list properties: each group row carries a single element, not an array. */
+type GroupValueForProp<T> =
+  NonNull<T> extends readonly unknown[]
+    ? NonNull<T> extends readonly NodeId[]
+      ? NodeId
+      : ArrayItem<NonNull<T>>
+    : T;
+
 export type GroupValues<TModel, TGroupBy extends AggregateGroupBy<TModel> | undefined> =
   TGroupBy extends AggregateGroupBy<TModel>
-    ? Simplify<Pick<ModelProps<TModel>, SelectedGroupKeys<TGroupBy> & keyof ModelProps<TModel>>>
+    ? Simplify<{
+        [K in SelectedGroupKeys<TGroupBy> & keyof ModelProps<TModel>]: GroupValueForProp<
+          ModelProps<TModel>[K]
+        >;
+      }>
     : undefined;
 
 export type AggregateValue<TDef> = TDef extends { avg: infer P extends PropertyKey }
-  ? { property: P; value: number }
+  ? { aggregate: "avg"; property: P; value: number }
   : TDef extends { min: infer P extends PropertyKey }
-    ? { property: P; value: number }
+    ? { aggregate: "min"; property: P; value: number }
     : TDef extends { max: infer P extends PropertyKey }
-      ? { property: P; value: number }
+      ? { aggregate: "max"; property: P; value: number }
       : TDef extends { sum: infer P extends PropertyKey }
-        ? { property: P; value: number }
+        ? { aggregate: "sum"; property: P; value: number }
         : TDef extends { count: infer P }
           ? Record<string, never> extends P
-            ? { value: number }
-            : { property: P; value: number }
+            ? { aggregate: "count"; value: number }
+            : { aggregate: "count"; property: P; value: number }
           : never;
+
+/** Request-order slots. A missing Cognite `value` is `undefined` in that index. */
+type AggregateValuesTuple<TAggregates> = TAggregates extends readonly unknown[]
+  ? { readonly [I in keyof TAggregates]: AggregateValue<TAggregates[I]> | undefined }
+  : undefined;
+
+type NormalizedAggregates<T> = [T] extends [undefined]
+  ? undefined
+  : T extends readonly unknown[]
+    ? T
+    : readonly [T];
+
+type ResolvedAggregateDefs<TOptions> = TOptions extends { aggregates: infer A }
+  ? NormalizedAggregates<A>
+  : TOptions extends { aggregate: infer D }
+    ? readonly [D]
+    : undefined;
+
+type FirstAggregateValue<TAggregates> = TAggregates extends readonly [infer First, ...unknown[]]
+  ? AggregateValue<First>
+  : TAggregates extends readonly (infer Element)[]
+    ? AggregateValue<Element>
+    : undefined;
 
 export type AggregateOptions<TModel> = {
   viewExternalId: string;
   filters?: WhereInput<TModel>;
   groupBy?: AggregateGroupBy<TModel>;
+  /**
+   * One or more Cognite aggregate ops (order preserved in the request and results).
+   * A single definition may be passed as an object: `aggregates: { count: {} }`.
+   */
+  aggregates?: AggregateDefinition<TModel> | readonly AggregateDefinition<TModel>[];
+  /**
+   * @deprecated Use `aggregates`. Still accepted as a single-op alias.
+   * Cannot be set together with `aggregates`.
+   */
   aggregate?: AggregateDefinition<TModel>;
 };
 
 export type AggregateResultItem<
   TModel,
   TGroupBy extends AggregateGroupBy<TModel> | undefined = undefined,
-  TAggregate extends AggregateDefinition<TModel> | undefined = undefined,
+  TAggregates extends readonly AggregateDefinition<TModel>[] | undefined = undefined,
 > = {
   group?: GroupValues<TModel, TGroupBy>;
-  aggregate?: AggregateValue<TAggregate>;
-};
+} & ([TAggregates] extends [undefined]
+  ? { aggregates?: undefined; aggregate?: undefined }
+  : {
+      aggregates: AggregateValuesTuple<TAggregates>;
+      /** @deprecated Prefer `aggregates[0]`. First requested op, when that slot has a value. */
+      aggregate?: FirstAggregateValue<TAggregates>;
+    });
+
+export type AggregateResultItemForOptions<
+  TModel,
+  TOptions extends AggregateOptions<TModel>,
+> = AggregateResultItem<TModel, TOptions["groupBy"], ResolvedAggregateDefs<TOptions>>;
 
 export type AggregateResult<TItem = Record<string, unknown>> = {
   items: TItem[];
@@ -289,9 +359,7 @@ export type AggregateResult<TItem = Record<string, unknown>> = {
 
 export type AggregateExecutor<TModel> = <const TOptions extends AggregateOptions<TModel>>(
   options: TOptions,
-) => Promise<
-  AggregateResult<AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregate"]>>
->;
+) => Promise<AggregateResult<AggregateResultItemForOptions<TModel, TOptions>>>;
 
 type RelationReferenceValue<T> = [NonNull<T>] extends [readonly unknown[]] ? NodeId[] : NodeId;
 type NodeIdLike = { space: string; externalId: string };

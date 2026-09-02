@@ -43,6 +43,20 @@ const assetView: ViewDefinition = {
       source: { type: "view", space: "equip_space", externalId: "Equipment", version: "1" },
       direction: "outwards",
     },
+    timeSeries: {
+      through: {
+        source: {
+          type: "view",
+          space: "ts_space",
+          externalId: "TimeSeries",
+          version: "1",
+        },
+        identifier: "assets",
+      },
+      source: { type: "view", space: "ts_space", externalId: "TimeSeries", version: "1" },
+      connectionType: "multi_reverse_direct_relation",
+      targetsList: true,
+    },
   },
 };
 
@@ -145,8 +159,20 @@ describe("parseViews", () => {
           relationTargetSpace: "equip_space",
           relationTargetExternalId: "Equipment",
         }),
+        expect.objectContaining({
+          fieldName: "timeSeries",
+          cogniteType: "reverse_direct",
+          isReverseRelation: true,
+          targetsList: true,
+        }),
       ]),
     );
+  });
+
+  it("does not mutate the input views array order", () => {
+    const equipmentFirst = [equipmentView, assetView];
+    parseViews(equipmentFirst);
+    expect(equipmentFirst.map((view) => view.externalId)).toEqual(["Equipment", "Asset"]);
   });
 
   it("extracts enum values from properties with type 'enum'", () => {

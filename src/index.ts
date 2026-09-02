@@ -10,6 +10,7 @@ export type {
   AggregateOptions,
   AggregateResult,
   AggregateResultItem,
+  AggregateResultItemForOptions,
   DataModelId,
   DatapointAggregate,
   DatapointSeriesResult,

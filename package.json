@@ -80,6 +80,7 @@
     "format": "biome format --write .",
     "typecheck": "tsc --noEmit",
     "check": "npm run lint && npm run typecheck",
+    "generate:cognite-core": "tsx scripts/generate-cognite-core.ts",
     "prepublishOnly": "npm run typecheck && npm run build",
     "release:version": "changeset version",
     "release:publish": "changeset publish"

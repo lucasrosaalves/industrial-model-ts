@@ -15,6 +15,8 @@ export interface FieldDefinition {
   isEdge: boolean;
   isReverseRelation: boolean;
   isListDirectRelation: boolean;
+  /** True when a reverse relation is through a list direct relation (Cognite cannot traverse these). */
+  targetsList?: boolean;
   relationTarget: string | null;
   relationTargetSpace: string | null;
   relationTargetExternalId: string | null;
@@ -37,7 +39,10 @@ export function getPropsFields(view: ViewDefinition): FieldDefinition[] {
 /** Fields for the Relations type param */
 export function getRelationTypeFields(view: ViewDefinition): FieldDefinition[] {
   return view.fields.filter(
-    (f) => (f.isRelation || f.isEdge || f.isReverseRelation) && f.relationTarget,
+    (f) =>
+      (f.isRelation || f.isEdge || f.isReverseRelation) &&
+      f.relationTarget != null &&
+      f.targetsList !== true,
   );
 }
 

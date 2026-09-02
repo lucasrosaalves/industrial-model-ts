@@ -1,21 +1,24 @@
 import { z } from "zod";
 import type { ViewDefinition } from "../cognite";
-import { MAX_GROUP_BY } from "../constants";
+import { MAX_AGGREGATES, MAX_GROUP_BY } from "../constants";
 import type { ViewMapper } from "../mappers/view-mapper";
 import type { AggregateDefinition, AggregateGroupBy, AggregateOptions } from "../types";
 import {
   getDirectRelationSource,
   getSelectedGroupByKeys,
+  isCountableProperty,
   isGroupableProperty,
   isNumericProperty,
   isViewPropertyDefinition,
+  normalizeAggregatesOption,
+  resolveAggregateDefinitions,
 } from "../utils";
 import { QueryValidator } from "./query-validator";
 
 const NODE_COUNT_PROPERTIES = new Set(["externalId", "space"]);
 
 function issuePath(path: PropertyKey[]): string {
-  return path.length === 0 ? "aggregate" : path.map(String).join(".");
+  return path.length === 0 ? "aggregates" : path.map(String).join(".");
 }
 
 function formatZodIssues(error: z.ZodError, path: Array<string | number>): string[] {
@@ -47,9 +50,26 @@ export class AggregateValidator {
     errors.push(...this.validateOptionsShape(options, rootView));
 
     const selectedGroupBy = options.groupBy ? getSelectedGroupByKeys(options.groupBy) : [];
+    const aggregateDefs = resolveAggregateDefinitions(options);
+    const hasAggregates = aggregateDefs.length > 0;
 
-    if (selectedGroupBy.length === 0 && options.aggregate === undefined) {
-      errors.push("aggregate: either groupBy or aggregate must be provided");
+    if (options.aggregate !== undefined && options.aggregates !== undefined) {
+      errors.push("aggregates: cannot set both aggregate and aggregates");
+    }
+
+    if (
+      options.aggregates !== undefined &&
+      normalizeAggregatesOption(options.aggregates).length === 0
+    ) {
+      errors.push("aggregates: must contain at least one aggregate definition");
+    }
+
+    if (aggregateDefs.length > MAX_AGGREGATES) {
+      errors.push(`aggregates: at most ${MAX_AGGREGATES} operations can be requested`);
+    }
+
+    if (selectedGroupBy.length === 0 && !hasAggregates) {
+      errors.push("aggregates: either groupBy, aggregate, or aggregates must be provided");
     }
 
     if (options.filters !== undefined) {
@@ -62,12 +82,12 @@ export class AggregateValidator {
       errors.push(...this.validateGroupBy(options.groupBy, rootView, ["groupBy"]));
     }
 
-    if (options.aggregate !== undefined) {
+    for (const { def, path } of this.aggregateDefEntries(options)) {
       errors.push(
         ...this.validateAggregate(
-          options.aggregate as AggregateDefinition<Record<string, unknown>>,
+          def as AggregateDefinition<Record<string, unknown>>,
           rootView,
-          ["aggregate"],
+          path,
         ),
       );
     }
@@ -79,6 +99,24 @@ export class AggregateValidator {
     }
   }
 
+  private aggregateDefEntries<TModel>(
+    options: AggregateOptions<TModel>,
+  ): Array<{ def: AggregateDefinition<TModel>; path: Array<string | number> }> {
+    if (options.aggregates !== undefined) {
+      const defs = normalizeAggregatesOption(options.aggregates);
+      if (Array.isArray(options.aggregates)) {
+        return defs.flatMap((def, index) =>
+          def === undefined ? [] : [{ def, path: ["aggregates", index] }],
+        );
+      }
+      return defs.map((def) => ({ def, path: ["aggregates"] }));
+    }
+    if (options.aggregate !== undefined) {
+      return [{ def: options.aggregate, path: ["aggregate"] }];
+    }
+    return [];
+  }
+
   private validateOptionsShape<TModel>(
     options: AggregateOptions<TModel>,
     rootView: ViewDefinition,
@@ -88,6 +126,7 @@ export class AggregateValidator {
         viewExternalId: z.literal(rootView.externalId),
         filters: z.unknown().optional(),
         groupBy: z.unknown().optional(),
+        aggregates: z.unknown().optional(),
         aggregate: z.unknown().optional(),
       })
       .strict();
@@ -148,7 +187,7 @@ export class AggregateValidator {
           return [];
         }
         const viewProperty = view.properties[property];
-        if (!viewProperty || !isGroupableProperty(viewProperty)) {
+        if (!viewProperty || !isCountableProperty(viewProperty)) {
           return [`${issuePath([...path, "count"])}: property "${property}" cannot be counted`];
         }
         return [];

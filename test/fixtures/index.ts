@@ -1,8 +1,11 @@
 export {
+  makeCognite3DTransformationMultiAggregateResponse,
   makeCogniteAssetAggregateByNameResponse,
+  makeCogniteAssetAggregateByTagResponse,
   makeCogniteAssetCountByNameResponse,
   makeCogniteAssetDistinctSourceIdsResponse,
   makeCogniteAssetGlobalCountResponse,
+  makeCogniteTimeSeriesAggregateByAssetResponse,
   makeCogniteVolumeAggregateByTypeResponse,
   makeCogniteVolumeGroupByObject3DResponse,
   makeCogniteVolumeNumericAggregateResponse,

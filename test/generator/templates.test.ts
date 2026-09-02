@@ -156,6 +156,23 @@ const mockViews: ViewDefinition[] = [
         relationTargetExternalId: "User",
         enumValues: null,
       },
+      {
+        fieldName: "taggedFiles",
+        originalName: "taggedFiles",
+        cogniteType: "reverse_direct",
+        mappedType: "NodeId",
+        isNullable: false,
+        isList: true,
+        isRelation: true,
+        isEdge: false,
+        isReverseRelation: true,
+        isListDirectRelation: false,
+        targetsList: true,
+        relationTarget: "User",
+        relationTargetSpace: "target_space",
+        relationTargetExternalId: "User",
+        enumValues: null,
+      },
     ],
   },
 ];
@@ -201,7 +218,7 @@ describe("renderTypes", () => {
     expect(output).toContain("export type MyDataModelViewExternalId =");
     expect(output).toContain('| "Equipment"');
     expect(output).toContain('| "User"');
-    expect(output).toContain('  "Equipment": Equipment;');
+    expect(output).toContain("  Equipment: Equipment;");
     expect(output).toContain("export interface MyDataModelModelByView");
     expect(output).toContain(
       "export type MyDataModelModel<TView extends MyDataModelViewExternalId>",
@@ -230,6 +247,35 @@ describe("renderTypes", () => {
     const output = renderTypes(mockViews, mockConfig);
 
     expect(output).toContain("status?: Equipment_Status;");
+  });
+
+  it("omits reverse relations whose targetsList is true", () => {
+    const output = renderTypes(mockViews, mockConfig);
+    const roleSection = output.split("export type Role")[1]?.split("export type")[0];
+
+    expect(roleSection).toContain("users: User[]");
+    expect(roleSection).not.toContain("taggedFiles");
+  });
+
+  it("imports from a custom types module when configured", () => {
+    const output = renderTypes(mockViews, { ...mockConfig, typesModule: "../types" });
+
+    expect(output).toContain('} from "../types";');
+    expect(output).not.toContain('from "industrial-model"');
+  });
+
+  it("omits Generated at when omitGeneratedAt is set", () => {
+    const output = renderTypes(mockViews, { ...mockConfig, omitGeneratedAt: true });
+
+    expect(output).not.toContain("Generated at:");
+    expect(output).toContain("// industrial-model v0.2.0");
+  });
+
+  it("omits the package version when omitPackageVersion is set", () => {
+    const output = renderTypes(mockViews, { ...mockConfig, omitPackageVersion: true });
+
+    expect(output).not.toContain("industrial-model v");
+    expect(output).toContain("// Generated at: 2026-01-01T00:00:00.000Z");
   });
 });
 

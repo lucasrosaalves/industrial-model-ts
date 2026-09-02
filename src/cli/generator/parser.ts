@@ -23,7 +23,7 @@ export function parseViews(
   knownExternalIds?: Set<string>,
 ): ViewDefinition[] {
   const available = knownExternalIds ?? new Set(views.map((v) => v.externalId));
-  const parsed = views.sort((a, b) => a.externalId.localeCompare(b.externalId)).map(parseView);
+  const parsed = [...views].sort((a, b) => a.externalId.localeCompare(b.externalId)).map(parseView);
 
   for (const view of parsed) {
     for (const field of view.fields) {
@@ -144,6 +144,7 @@ function processReverseProperty(
     isEdge: false,
     isReverseRelation: true,
     isListDirectRelation: false,
+    targetsList: prop.targetsList === true,
     relationTarget: toPascal(prop.source.externalId),
     relationTargetSpace: prop.source.space,
     relationTargetExternalId: prop.source.externalId,

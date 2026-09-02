@@ -2,7 +2,6 @@ import type { CogniteClient } from "@cognite/sdk";
 import { IndustrialModelClient } from "../client";
 import type {
   AggregateOptions,
-  DataModelId,
   DatapointsExecutor,
   DeleteResult,
   IndustrialModelClientOptions,
@@ -10,6 +9,7 @@ import type {
   QueryOptions,
   UpsertOptions,
 } from "../types";
+import { COGNITE_CORE_DATA_MODEL } from "./data-model";
 import type {
   CogniteCoreAggregateExecutor,
   CogniteCoreModel,
@@ -17,13 +17,6 @@ import type {
   CogniteCoreUpsertExecutor,
   CogniteCoreViewExternalId,
 } from "./types";
-
-/** Data model id for Cognite Core v1. */
-export const COGNITE_CORE_DATA_MODEL = {
-  space: "cdf_cdm",
-  externalId: "CogniteCore",
-  version: "v1",
-} satisfies DataModelId;
 
 export class CogniteCoreClient {
   private readonly model: IndustrialModelClient;
@@ -53,7 +46,8 @@ export class CogniteCoreClient {
       options: Omit<AggregateOptions<CogniteCoreModel<TView>>, "viewExternalId"> = {},
     ) => aggregate({ ...options, viewExternalId });
 
-    return execute as CogniteCoreAggregateExecutor<TView>;
+    // Executor options omit viewExternalId; the executor type adds it back for result inference.
+    return execute as unknown as CogniteCoreAggregateExecutor<TView>;
   }
 
   upsert<TView extends CogniteCoreViewExternalId>(

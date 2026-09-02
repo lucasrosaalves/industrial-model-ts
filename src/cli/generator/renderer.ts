@@ -22,6 +22,12 @@ export interface GeneratorConfig {
   outputPath: string;
   packageVersion: string;
   generatedAt: string;
+  /** Module specifier used in generated type imports. Defaults to `"industrial-model"`. */
+  typesModule?: string;
+  /** Skip the `Generated at:` header line so committed output is stable. */
+  omitGeneratedAt?: boolean;
+  /** Skip the `industrial-model v…` header line so committed output is stable across releases. */
+  omitPackageVersion?: boolean;
 }
 
 export function createGeneratorConfig(options: {

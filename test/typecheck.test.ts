@@ -122,7 +122,7 @@ describe("public type contracts", () => {
         QueryResultItem<CogniteCoreModel<"CogniteAsset">, { readonly name: true }> | undefined
       >();
       expectTypeOf<Item["children"]>().toEqualTypeOf<
-        QueryResultItem<CogniteCoreModel<"CogniteAsset">, { readonly name: true }>[] | undefined
+        QueryResultItem<CogniteCoreModel<"CogniteAsset">, { readonly name: true }>[]
       >();
 
       const deleteResult = core.delete([{ space: "asset-space", externalId: "pump-1" }]);
@@ -130,6 +130,61 @@ describe("public type contracts", () => {
 
       // @ts-expect-error view names are constrained to Cognite Core views.
       core.query("CogniteMissingView");
+    });
+  });
+
+  it("omits inward list reverse relations from generated CogniteAsset selects", () => {
+    typecheckOnly(() => {
+      type AssetSelect = QuerySelect<CogniteCoreModel<"CogniteAsset">>;
+
+      const allowed = {
+        name: true,
+        children: { name: true },
+      } as const satisfies AssetSelect;
+      void allowed;
+
+      const rejected = {
+        name: true,
+        // @ts-expect-error Cognite cannot traverse inward list direct relations.
+        timeSeries: { name: true },
+      } as const satisfies AssetSelect;
+      void rejected;
+    });
+  });
+
+  it("infers exploded list groupBy on generated Cognite Core models", () => {
+    typecheckOnly(() => {
+      const core = null as unknown as CogniteCoreClient;
+
+      const timeSeriesResult = core.aggregate("CogniteTimeSeries")({
+        groupBy: { assets: true, tags: true },
+        aggregates: [{ count: {} }],
+      });
+
+      type TimeSeriesItem = Awaited<typeof timeSeriesResult>["items"][number];
+      expectTypeOf<NonNullable<TimeSeriesItem["group"]>["assets"]>().toEqualTypeOf<NodeId>();
+      expectTypeOf<NonNullable<TimeSeriesItem["group"]>["tags"]>().toEqualTypeOf<string>();
+
+      const transformResult = core.aggregate("Cognite3DTransformation")({
+        aggregates: [{ count: {} }, { avg: "scaleX" }],
+      });
+      type TransformItem = Awaited<typeof transformResult>["items"][number];
+      expectTypeOf<
+        NonNullable<TransformItem["aggregates"][0]>["aggregate"]
+      >().toEqualTypeOf<"count">();
+      expectTypeOf<
+        NonNullable<TransformItem["aggregates"][1]>["property"]
+      >().toEqualTypeOf<"scaleX">();
+
+      void core.aggregate("CognitePointCloudVolume")({
+        // @ts-expect-error list numeric properties are not numeric-aggregatable
+        aggregates: [{ avg: "volume" }],
+      });
+
+      void core.aggregate("CogniteAsset")({
+        // @ts-expect-error list properties are not countable
+        aggregates: [{ count: "tags" }],
+      });
     });
   });
 

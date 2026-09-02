@@ -1,6 +1,6 @@
-import type { InstancesAggregateResponse } from "../cognite";
-import type { AggregateGroupBy, AggregateOptions, AggregateResultItem, NodeId } from "../types";
-import { getSelectedGroupByKeys } from "../utils";
+import type { InstancesAggregateResponse, InstancesAggregateValue } from "../cognite";
+import type { AggregateDefinition, AggregateOptions, NodeId } from "../types";
+import { getAggregateOpName, getSelectedGroupByKeys, resolveAggregateDefinitions } from "../utils";
 
 function isNodeId(value: unknown): value is NodeId {
   return (
@@ -13,12 +13,28 @@ function isNodeId(value: unknown): value is NodeId {
   );
 }
 
+function mapAggregateValue<TModel>(
+  aggregateValue: InstancesAggregateValue | undefined,
+  requested: AggregateDefinition<TModel>,
+): { aggregate: string; property?: string; value: number } | undefined {
+  if (aggregateValue?.value === undefined) return undefined;
+  const aggregate = aggregateValue.aggregate ?? getAggregateOpName(requested);
+  return aggregateValue.property != null
+    ? { aggregate, property: aggregateValue.property, value: aggregateValue.value }
+    : { aggregate, value: aggregateValue.value };
+}
+
 export class AggregateResultMapper {
-  map<TModel, TGroupBy extends AggregateGroupBy<TModel> | undefined>(
+  map<TModel>(
     response: InstancesAggregateResponse,
-    options: Pick<AggregateOptions<TModel>, "groupBy" | "aggregate">,
-  ): AggregateResultItem<TModel, TGroupBy>[] {
+    options: Pick<AggregateOptions<TModel>, "groupBy" | "aggregate" | "aggregates">,
+  ): Array<{
+    group?: Record<string, unknown>;
+    aggregates?: Array<{ aggregate: string; property?: string; value: number } | undefined>;
+    aggregate?: { aggregate: string; property?: string; value: number };
+  }> {
     const groupByKeys = options.groupBy ? getSelectedGroupByKeys(options.groupBy) : [];
+    const requestedOps = resolveAggregateDefinitions(options);
 
     return response.items.map((item) => {
       let group: Record<string, unknown> | undefined;
@@ -36,18 +52,17 @@ export class AggregateResultMapper {
         }
       }
 
-      const aggregateValue = item.aggregates[0];
-      const aggregate =
-        aggregateValue?.value !== undefined
-          ? aggregateValue.property != null
-            ? { property: aggregateValue.property, value: aggregateValue.value }
-            : { value: aggregateValue.value }
+      const aggregates =
+        requestedOps.length > 0
+          ? requestedOps.map((def, index) => mapAggregateValue(item.aggregates[index], def))
           : undefined;
+      const aggregate = aggregates?.[0];
 
       return {
         ...(group !== undefined ? { group } : {}),
+        ...(aggregates !== undefined ? { aggregates } : {}),
         ...(aggregate !== undefined ? { aggregate } : {}),
-      } as AggregateResultItem<TModel, TGroupBy>;
+      };
     });
   }
 }

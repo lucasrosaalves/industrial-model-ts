@@ -21,6 +21,7 @@ export type {
   InstancesAggregateDefinition,
   InstancesAggregateRequest,
   InstancesAggregateResponse,
+  InstancesAggregateValue,
   InstancesApplyDelete,
   InstancesApplyEdgeWrite,
   InstancesApplyNodeWrite,
