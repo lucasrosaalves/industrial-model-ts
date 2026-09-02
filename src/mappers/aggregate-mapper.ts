@@ -6,7 +6,7 @@ import type {
 } from "../cognite";
 import { AGGREGATE_LIMIT } from "../constants";
 import type { AggregateDefinition, AggregateOptions } from "../types";
-import { getSelectedGroupByKeys, toViewReference } from "../utils";
+import { getSelectedGroupByKeys, resolveAggregateDefinitions, toViewReference } from "../utils";
 import { AggregateValidator } from "../validators";
 import { FilterMapper } from "./filter-mapper";
 import type { ViewMapper } from "./view-mapper";
@@ -24,7 +24,7 @@ export class AggregateMapper {
   }
 
   async map<TModel>(options: AggregateOptions<TModel>): Promise<InstancesAggregateRequest> {
-    const { viewExternalId, filters, groupBy, aggregate } = options;
+    const { viewExternalId, filters, groupBy } = options;
     const rootView = await this.viewMapper.getView(viewExternalId);
     await this.validator.validate(options, rootView);
 
@@ -38,13 +38,17 @@ export class AggregateMapper {
           ? filterParts[0]
           : ({ and: filterParts } satisfies FilterDefinition);
 
+    const aggregateDefs = resolveAggregateDefinitions(options);
+
     return {
       view: toViewReference(rootView),
       instanceType: "node",
       limit: AGGREGATE_LIMIT,
       ...(filter !== undefined ? { filter } : {}),
       ...(groupBy ? { groupBy: getSelectedGroupByKeys(groupBy) } : {}),
-      ...(aggregate ? { aggregates: [mapAggregateDefinition(aggregate)] } : {}),
+      ...(aggregateDefs.length > 0
+        ? { aggregates: aggregateDefs.map(mapAggregateDefinition) }
+        : {}),
     };
   }
 }

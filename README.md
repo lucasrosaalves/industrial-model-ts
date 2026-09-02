@@ -29,8 +29,8 @@ npm install @cognite/sdk
 
 ## Requirements
 
-- Node.js `>=20`
-- `@cognite/sdk` `^10.10.0`
+- Node.js `>=22`
+- `@cognite/sdk` `^10.11.0`
 
 ## First Query
 
@@ -763,20 +763,18 @@ const { items } = await model.aggregate<CogniteAsset>()({
   groupBy: {
     sourceId: true,
   },
-  aggregate: {
-    count: {},
-  },
+  aggregates: { count: {} },
   filters: {
     name: { prefix: "WMT" },
   },
 });
 
 for (const row of items) {
-  console.log(row.group?.sourceId, row.aggregate?.value);
+  console.log(row.group?.sourceId, row.aggregates[0]?.value);
 }
 ```
 
-Omit `aggregate` to list distinct values for grouped fields:
+Omit `aggregates` to list distinct values for grouped fields:
 
 ```ts
 const { items } = await model.aggregate<CogniteAsset>()({
@@ -792,25 +790,23 @@ const sourceIds = items.map((row) => row.group?.sourceId);
 Use `avg`, `min`, `max`, or `sum` on numeric properties:
 
 ```ts
-type PointCloudVolume = IndustrialModel<{
+type EquipmentVolume = IndustrialModel<{
   volume: number;
   volumeType: string;
   object3D?: NodeId;
 }>;
 
-const { items } = await model.aggregate<PointCloudVolume>()({
-  viewExternalId: "CognitePointCloudVolume",
+const { items } = await model.aggregate<EquipmentVolume>()({
+  viewExternalId: "EquipmentVolume",
   groupBy: {
     volumeType: true,
   },
-  aggregate: {
-    avg: "volume",
-  },
+  aggregates: { avg: "volume" },
 });
 
 items[0]?.group?.volumeType;
-items[0]?.aggregate?.property; // "volume"
-items[0]?.aggregate?.value;
+items[0]?.aggregates[0]?.property; // "volume"
+items[0]?.aggregates[0]?.value;
 ```
 
 Count all rows matching a filter:
@@ -818,41 +814,60 @@ Count all rows matching a filter:
 ```ts
 const { items } = await model.aggregate<CogniteAsset>()({
   viewExternalId: "CogniteAsset",
-  aggregate: {
-    count: {},
-  },
+  aggregates: { count: {} },
   filters: {
     OR: [{ tags: { containsAny: ["critical"] } }, { sourceId: { eq: "sap" } }],
   },
 });
 
-items[0]?.aggregate?.value;
+items[0]?.aggregates[0]?.value;
 ```
 
 Group by a direct relation when you need relation IDs in the result:
 
 ```ts
-const { items } = await model.aggregate<PointCloudVolume>()({
-  viewExternalId: "CognitePointCloudVolume",
+const { items } = await model.aggregate<EquipmentVolume>()({
+  viewExternalId: "EquipmentVolume",
   groupBy: {
     object3D: true,
   },
-  aggregate: {
-    sum: "volume",
-  },
+  aggregates: { sum: "volume" },
 });
 
 items[0]?.group?.object3D?.externalId;
 ```
+
+List **direct** relations (for example `assets: NodeId[]`) and **primitive** lists (for example `tags: string[]`) are groupable. Cognite **explodes** the list so each element becomes its own group row (a single value in `group`, not an array):
+
+```ts
+type BaseEvent = IndustrialModel<{
+  assets: NodeId[];
+  duration: number;
+}>;
+
+const { items } = await model.aggregate<BaseEvent>()({
+  viewExternalId: "BaseEvent",
+  groupBy: {
+    assets: true,
+  },
+  aggregates: [{ count: "externalId" }, { sum: "duration" }],
+});
+
+for (const row of items) {
+  const count = row.aggregates.find((op) => op.aggregate === "count");
+  const duration = row.aggregates.find((op) => op.aggregate === "sum");
+  console.log(row.group?.assets?.externalId, count?.value, duration?.value);
+}
+```
+
+Use `aggregates` for one or more Cognite aggregate ops in a single call (max 5). A single op can be an object (`aggregates: { count: {} }`) or a one-element array. The legacy `aggregate: { count: {} }` option still works as an alias; do not set both. Each result value includes `aggregate` (`"count" | "avg" | …`) so ops are identifiable without relying on array indexes. If Cognite omits a value, that request-order slot is `undefined`. The first op is also available as `row.aggregate` for older callers.
 
 Text search filters are also supported in aggregations:
 
 ```ts
 const { items } = await model.aggregate<CogniteAsset>()({
   viewExternalId: "CogniteAsset",
-  aggregate: {
-    count: {},
-  },
+  aggregates: { count: {} },
   filters: {
     name: { search: { query: "compressor seal" } },
   },
@@ -925,14 +940,14 @@ Aggregations use the same positional-view-name pattern:
 ```ts
 const { items } = await core.aggregate("CogniteEquipment")({
   groupBy: { manufacturer: true },
-  aggregate: { count: {} },
+  aggregates: { count: {} },
   filters: {
     equipmentType: { exists: true },
   },
 });
 
 items[0]?.group?.manufacturer;
-items[0]?.aggregate?.value;
+items[0]?.aggregates[0]?.value;
 ```
 
 Upserts use the same pattern and infer the item shape from the view name:
@@ -1223,11 +1238,12 @@ type DeleteResult = {
 | Option | Description |
 | --- | --- |
 | `viewExternalId` | View to aggregate. |
-| `groupBy` | Groupable properties set to `true`; max 5 fields. |
+| `groupBy` | Groupable properties set to `true`; max 5 fields. Includes scalars, single direct relations, **list** direct relations, and **list** primitives (Cognite explodes lists into one row per element). |
 | `filters` | Same filter syntax as `query()`. |
-| `aggregate` | One of `avg`, `min`, `max`, `sum`, or `count`. |
+| `aggregates` | One or more aggregate defs (object or array, max 5) in request/result order. List properties cannot be counted or used with `avg`/`min`/`max`/`sum`. |
+| `aggregate` | Deprecated single-op alias for `aggregates`. Cannot be set together with `aggregates`. |
 
-Provide at least one of `groupBy` or `aggregate`. Omit `aggregate` to fetch distinct grouped values. The client requests up to 1000 aggregate rows.
+Provide at least one of `groupBy`, `aggregates`, or `aggregate`. Omit aggregate ops to fetch distinct grouped values. The client requests up to 1000 aggregate rows. Each result item exposes `aggregates` (and `aggregate` as the first op) when ops were requested. Missing Cognite values leave `undefined` in that request-order slot.
 
 | Aggregate | Input | Use case |
 | --- | --- | --- |
@@ -1237,6 +1253,8 @@ Provide at least one of `groupBy` or `aggregate`. Omit `aggregate` to fetch dist
 | `min` | `{ min: "volume" }` | Minimum numeric value. |
 | `max` | `{ max: "volume" }` | Maximum numeric value. |
 | `sum` | `{ sum: "volume" }` | Sum of a numeric property. |
+
+A single op can be an object, e.g. `aggregates: { count: {} }`, or a one-element array.
 
 ### `model.files.upload(fileInfo, content?)`
 
@@ -1363,7 +1381,7 @@ Logical combinators `AND`, `OR`, and `NOT` are supported at any nesting level, i
 
 ## Code Generator
 
-The package includes a CLI to generate typed models and client code from a Cognite data model. See the [CLI documentation](./src/cli/README.md).
+The package includes a CLI to generate typed models and client code from a Cognite data model. See the [CLI documentation](./src/cli/README.md). Committed Cognite Core types in `src/cognite-core/types.ts` are regenerated with `npm run generate:cognite-core`.
 
 ## Releasing
 

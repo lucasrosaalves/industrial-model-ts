@@ -8,7 +8,7 @@ describeIntegration("integration aggregate", () => {
     const core = createIntegrationCoreClient();
 
     const result = await core.aggregate("CogniteAsset")({
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       groupBy: { parent: true },
       filters: { description: { exists: true } },
     });

@@ -1,7 +1,11 @@
+/* eslint-disable */
+// DO NOT EDIT — this file is auto-generated
+// Data model: cdf_cdm/CogniteCore v1
+
 import type {
   AggregateOptions,
   AggregateResult,
-  AggregateResultItem,
+  AggregateResultItemForOptions,
   IndustrialModel,
   NodeId,
   QueryOptions,
@@ -12,293 +16,59 @@ import type {
   UpsertResult,
 } from "../types";
 
+export type Cognite360ImageAnnotation_Status = "Suggested" | "Approved" | "Rejected";
+export type Cognite360ImageCollection_Status = "Queued" | "Processing" | "Done" | "Failed";
+export type Cognite360ImageCollection_Type = "CAD" | "PointCloud" | "Image360";
+export type Cognite360ImageModel_Type = "CAD" | "PointCloud" | "Image360";
+export type Cognite360ImageStation_GroupType = "Station360";
+export type Cognite3DModel_Type = "CAD" | "PointCloud" | "Image360";
+export type Cognite3DRevision_Status = "Queued" | "Processing" | "Done" | "Failed";
+export type Cognite3DRevision_Type = "CAD" | "PointCloud" | "Image360";
+export type CogniteAnnotation_Status = "Suggested" | "Approved" | "Rejected";
+export type CogniteCADModel_Type = "CAD" | "PointCloud" | "Image360";
+export type CogniteCADRevision_Status = "Queued" | "Processing" | "Done" | "Failed";
+export type CogniteCADRevision_Type = "CAD" | "PointCloud" | "Image360";
+export type CogniteDiagramAnnotation_Status = "Suggested" | "Approved" | "Rejected";
+export type CognitePointCloudModel_Type = "CAD" | "PointCloud" | "Image360";
+export type CognitePointCloudRevision_Status = "Queued" | "Processing" | "Done" | "Failed";
+export type CognitePointCloudRevision_Type = "CAD" | "PointCloud" | "Image360";
+export type CognitePointCloudVolume_VolumeType = "Cylinder" | "Box";
+export type CogniteTimeSeries_Type = "string" | "numeric" | "state";
+
 export type CogniteCoreViewExternalId =
-  | "CogniteDescribable"
-  | "CogniteSourceable"
-  | "CogniteSourceSystem"
-  | "CogniteSchedulable"
-  | "CogniteVisualizable"
-  | "Cognite3DTransformation"
-  | "CogniteCubeMap"
-  | "Cognite3DObject"
-  | "Cognite3DModel"
-  | "CogniteCADModel"
-  | "Cognite3DRevision"
-  | "CognitePointCloudModel"
-  | "Cognite360ImageModel"
-  | "CogniteCADRevision"
-  | "CognitePointCloudRevision"
-  | "Cognite360ImageCollection"
-  | "CogniteCADNode"
-  | "CognitePointCloudVolume"
   | "Cognite360Image"
-  | "Cognite360ImageStation"
   | "Cognite360ImageAnnotation"
+  | "Cognite360ImageCollection"
+  | "Cognite360ImageModel"
+  | "Cognite360ImageStation"
+  | "Cognite3DModel"
+  | "Cognite3DObject"
+  | "Cognite3DRevision"
+  | "Cognite3DTransformation"
+  | "CogniteActivity"
+  | "CogniteAnnotation"
   | "CogniteAsset"
   | "CogniteAssetClass"
   | "CogniteAssetType"
+  | "CogniteCADModel"
+  | "CogniteCADNode"
+  | "CogniteCADRevision"
+  | "CogniteCubeMap"
+  | "CogniteDescribable"
+  | "CogniteDiagramAnnotation"
   | "CogniteEquipment"
   | "CogniteEquipmentType"
   | "CogniteFile"
   | "CogniteFileCategory"
-  | "CogniteActivity"
+  | "CognitePointCloudModel"
+  | "CognitePointCloudRevision"
+  | "CognitePointCloudVolume"
+  | "CogniteSchedulable"
+  | "CogniteSourceable"
+  | "CogniteSourceSystem"
   | "CogniteTimeSeries"
-  | "CogniteAnnotation"
-  | "CogniteDiagramAnnotation"
-  | "CogniteUnit";
-
-export type CogniteDescribable = IndustrialModel<{
-  name?: string;
-  description?: string;
-  tags?: string[];
-  aliases?: string[];
-}>;
-
-export type CogniteSourceable = IndustrialModel<
-  {
-    sourceId?: string;
-    sourceContext?: string;
-    source?: NodeId;
-    sourceCreatedTime?: Date;
-    sourceUpdatedTime?: Date;
-    sourceCreatedUser?: string;
-    sourceUpdatedUser?: string;
-  },
-  {
-    source?: CogniteSourceSystem;
-  }
->;
-
-export type CogniteSourceSystem = IndustrialModel<{
-  name?: string;
-  description?: string;
-  tags?: string[];
-  aliases?: string[];
-  version?: string;
-  manufacturer?: string;
-}>;
-
-export type CogniteSchedulable = IndustrialModel<{
-  startTime?: Date;
-  endTime?: Date;
-  scheduledStartTime?: Date;
-  scheduledEndTime?: Date;
-}>;
-
-export type CogniteVisualizable = IndustrialModel<
-  {
-    object3D?: NodeId;
-  },
-  {
-    object3D?: Cognite3DObject;
-  }
->;
-
-export type Cognite3DTransformation = IndustrialModel<{
-  translationX?: number;
-  translationY?: number;
-  translationZ?: number;
-  eulerRotationX?: number;
-  eulerRotationY?: number;
-  eulerRotationZ?: number;
-  scaleX?: number;
-  scaleY?: number;
-  scaleZ?: number;
-}>;
-
-export type CogniteCubeMap = IndustrialModel<
-  {
-    front?: NodeId;
-    back?: NodeId;
-    left?: NodeId;
-    right?: NodeId;
-    top?: NodeId;
-    bottom?: NodeId;
-  },
-  {
-    front?: CogniteFile;
-    back?: CogniteFile;
-    left?: CogniteFile;
-    right?: CogniteFile;
-    top?: CogniteFile;
-    bottom?: CogniteFile;
-  }
->;
-
-export type Cognite3DObject = IndustrialModel<
-  {
-    name?: string;
-    description?: string;
-    tags?: string[];
-    aliases?: string[];
-    xMin?: number;
-    xMax?: number;
-    yMin?: number;
-    yMax?: number;
-    zMin?: number;
-    zMax?: number;
-  },
-  {
-    asset?: CogniteAsset;
-    cadNodes?: CogniteCADNode[];
-    images360?: Cognite360Image[];
-    pointCloudVolumes?: CognitePointCloudVolume[];
-  }
->;
-
-export type Cognite3DModel = IndustrialModel<
-  {
-    name?: string;
-    description?: string;
-    tags?: string[];
-    aliases?: string[];
-    thumbnail?: NodeId;
-    type?: string;
-  },
-  {
-    thumbnail?: CogniteFile;
-  }
->;
-
-export type CogniteCADModel = IndustrialModel<
-  {
-    name?: string;
-    description?: string;
-    tags?: string[];
-    aliases?: string[];
-    thumbnail?: NodeId;
-    type?: string;
-  },
-  {
-    thumbnail?: CogniteFile;
-    revisions?: CogniteCADRevision[];
-  }
->;
-
-export type Cognite3DRevision = IndustrialModel<
-  {
-    status?: string;
-    published?: boolean;
-    type?: string;
-    model3D?: NodeId;
-  },
-  {
-    model3D?: Cognite3DModel;
-  }
->;
-
-export type CognitePointCloudModel = IndustrialModel<
-  {
-    name?: string;
-    description?: string;
-    tags?: string[];
-    aliases?: string[];
-    thumbnail?: NodeId;
-    type?: string;
-  },
-  {
-    thumbnail?: CogniteFile;
-    revisions?: CognitePointCloudRevision[];
-  }
->;
-
-export type Cognite360ImageModel = IndustrialModel<
-  {
-    name?: string;
-    description?: string;
-    tags?: string[];
-    aliases?: string[];
-    thumbnail?: NodeId;
-    type?: string;
-  },
-  {
-    thumbnail?: CogniteFile;
-    collections?: Cognite360ImageCollection[];
-  }
->;
-
-export type CogniteCADRevision = IndustrialModel<
-  {
-    status?: string;
-    published?: boolean;
-    type?: string;
-    model3D?: NodeId;
-    revisionId?: number;
-  },
-  {
-    model3D?: CogniteCADModel;
-  }
->;
-
-export type CognitePointCloudRevision = IndustrialModel<
-  {
-    status?: string;
-    published?: boolean;
-    type?: string;
-    model3D?: NodeId;
-    revisionId?: number;
-  },
-  {
-    model3D?: CognitePointCloudModel;
-  }
->;
-
-export type Cognite360ImageCollection = IndustrialModel<
-  {
-    name?: string;
-    description?: string;
-    tags?: string[];
-    aliases?: string[];
-    status?: string;
-    published?: boolean;
-    type?: string;
-    model3D?: NodeId;
-  },
-  {
-    model3D?: Cognite360ImageModel;
-  }
->;
-
-export type CogniteCADNode = IndustrialModel<
-  {
-    name?: string;
-    description?: string;
-    tags?: string[];
-    aliases?: string[];
-    object3D?: NodeId;
-    model3D?: NodeId;
-    cadNodeReference?: string;
-    revisions?: NodeId[];
-    treeIndexes?: number[];
-    subTreeSizes?: number[];
-  },
-  {
-    object3D?: Cognite3DObject;
-    model3D?: CogniteCADModel;
-    revisions?: CogniteCADRevision[];
-  }
->;
-
-export type CognitePointCloudVolume = IndustrialModel<
-  {
-    name?: string;
-    description?: string;
-    tags?: string[];
-    aliases?: string[];
-    object3D?: NodeId;
-    model3D?: NodeId;
-    volumeReferences?: string[];
-    revisions?: NodeId[];
-    volumeType?: string;
-    volume?: number[];
-    formatVersion?: string;
-  },
-  {
-    object3D?: Cognite3DObject;
-    model3D?: CogniteCADModel;
-    revisions?: CogniteCADRevision[];
-  }
->;
+  | "CogniteUnit"
+  | "CogniteVisualizable";
 
 export type Cognite360Image = IndustrialModel<
   {
@@ -333,14 +103,6 @@ export type Cognite360Image = IndustrialModel<
   }
 >;
 
-export type Cognite360ImageStation = IndustrialModel<{
-  name?: string;
-  description?: string;
-  tags?: string[];
-  aliases?: string[];
-  groupType?: string;
-}>;
-
 export type Cognite360ImageAnnotation = IndustrialModel<
   {
     name?: string;
@@ -355,9 +117,158 @@ export type Cognite360ImageAnnotation = IndustrialModel<
     sourceCreatedUser?: string;
     sourceUpdatedUser?: string;
     confidence?: number;
-    status?: string;
+    status?: Cognite360ImageAnnotation_Status;
     polygon?: number[];
     formatVersion?: string;
+  },
+  {
+    source?: CogniteSourceSystem;
+  }
+>;
+
+export type Cognite360ImageCollection = IndustrialModel<
+  {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aliases?: string[];
+    status?: Cognite360ImageCollection_Status;
+    published?: boolean;
+    type?: Cognite360ImageCollection_Type;
+    model3D?: NodeId;
+  },
+  {
+    model3D?: Cognite360ImageModel;
+  }
+>;
+
+export type Cognite360ImageModel = IndustrialModel<
+  {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aliases?: string[];
+    thumbnail?: NodeId;
+    type?: Cognite360ImageModel_Type;
+  },
+  {
+    thumbnail?: CogniteFile;
+    collections: Cognite360ImageCollection[];
+  }
+>;
+
+export type Cognite360ImageStation = IndustrialModel<{
+  name?: string;
+  description?: string;
+  tags?: string[];
+  aliases?: string[];
+  groupType?: Cognite360ImageStation_GroupType;
+}>;
+
+export type Cognite3DModel = IndustrialModel<
+  {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aliases?: string[];
+    thumbnail?: NodeId;
+    type?: Cognite3DModel_Type;
+  },
+  {
+    thumbnail?: CogniteFile;
+  }
+>;
+
+export type Cognite3DObject = IndustrialModel<
+  {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aliases?: string[];
+    xMin?: number;
+    xMax?: number;
+    yMin?: number;
+    yMax?: number;
+    zMin?: number;
+    zMax?: number;
+    images360: NodeId[];
+  },
+  {
+    asset?: CogniteAsset;
+    cadNodes: CogniteCADNode[];
+    images360: Cognite360Image[];
+    pointCloudVolumes: CognitePointCloudVolume[];
+  }
+>;
+
+export type Cognite3DRevision = IndustrialModel<
+  {
+    status?: Cognite3DRevision_Status;
+    published?: boolean;
+    type?: Cognite3DRevision_Type;
+    model3D?: NodeId;
+  },
+  {
+    model3D?: Cognite3DModel;
+  }
+>;
+
+export type Cognite3DTransformation = IndustrialModel<{
+  translationX?: number;
+  translationY?: number;
+  translationZ?: number;
+  eulerRotationX?: number;
+  eulerRotationY?: number;
+  eulerRotationZ?: number;
+  scaleX?: number;
+  scaleY?: number;
+  scaleZ?: number;
+}>;
+
+export type CogniteActivity = IndustrialModel<
+  {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aliases?: string[];
+    sourceId?: string;
+    sourceContext?: string;
+    source?: NodeId;
+    sourceCreatedTime?: Date;
+    sourceUpdatedTime?: Date;
+    sourceCreatedUser?: string;
+    sourceUpdatedUser?: string;
+    startTime?: Date;
+    endTime?: Date;
+    scheduledStartTime?: Date;
+    scheduledEndTime?: Date;
+    assets?: NodeId[];
+    equipment?: NodeId[];
+    timeSeries?: NodeId[];
+  },
+  {
+    source?: CogniteSourceSystem;
+    assets?: CogniteAsset[];
+    equipment?: CogniteEquipment[];
+    timeSeries?: CogniteTimeSeries[];
+  }
+>;
+
+export type CogniteAnnotation = IndustrialModel<
+  {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aliases?: string[];
+    sourceId?: string;
+    sourceContext?: string;
+    source?: NodeId;
+    sourceCreatedTime?: Date;
+    sourceUpdatedTime?: Date;
+    sourceCreatedUser?: string;
+    sourceUpdatedUser?: string;
+    confidence?: number;
+    status?: CogniteAnnotation_Status;
   },
   {
     source?: CogniteSourceSystem;
@@ -393,8 +304,8 @@ export type CogniteAsset = IndustrialModel<
     path?: CogniteAsset[];
     assetClass?: CogniteAssetClass;
     type?: CogniteAssetType;
-    children?: CogniteAsset[];
-    equipment?: CogniteEquipment[];
+    children: CogniteAsset[];
+    equipment: CogniteEquipment[];
   }
 >;
 
@@ -419,6 +330,113 @@ export type CogniteAssetType = IndustrialModel<
   },
   {
     assetClass?: CogniteAssetClass;
+  }
+>;
+
+export type CogniteCADModel = IndustrialModel<
+  {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aliases?: string[];
+    thumbnail?: NodeId;
+    type?: CogniteCADModel_Type;
+  },
+  {
+    thumbnail?: CogniteFile;
+    revisions: CogniteCADRevision[];
+  }
+>;
+
+export type CogniteCADNode = IndustrialModel<
+  {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aliases?: string[];
+    object3D?: NodeId;
+    model3D?: NodeId;
+    cadNodeReference?: string;
+    revisions?: NodeId[];
+    treeIndexes?: number[];
+    subTreeSizes?: number[];
+  },
+  {
+    object3D?: Cognite3DObject;
+    model3D?: CogniteCADModel;
+    revisions?: CogniteCADRevision[];
+  }
+>;
+
+export type CogniteCADRevision = IndustrialModel<
+  {
+    status?: CogniteCADRevision_Status;
+    published?: boolean;
+    type?: CogniteCADRevision_Type;
+    model3D?: NodeId;
+    revisionId?: number;
+  },
+  {
+    model3D?: CogniteCADModel;
+  }
+>;
+
+export type CogniteCubeMap = IndustrialModel<
+  {
+    front?: NodeId;
+    back?: NodeId;
+    left?: NodeId;
+    right?: NodeId;
+    top?: NodeId;
+    bottom?: NodeId;
+  },
+  {
+    front?: CogniteFile;
+    back?: CogniteFile;
+    left?: CogniteFile;
+    right?: CogniteFile;
+    top?: CogniteFile;
+    bottom?: CogniteFile;
+  }
+>;
+
+export type CogniteDescribable = IndustrialModel<{
+  name?: string;
+  description?: string;
+  tags?: string[];
+  aliases?: string[];
+}>;
+
+export type CogniteDiagramAnnotation = IndustrialModel<
+  {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aliases?: string[];
+    sourceId?: string;
+    sourceContext?: string;
+    source?: NodeId;
+    sourceCreatedTime?: Date;
+    sourceUpdatedTime?: Date;
+    sourceCreatedUser?: string;
+    sourceUpdatedUser?: string;
+    confidence?: number;
+    status?: CogniteDiagramAnnotation_Status;
+    startNodePageNumber?: number;
+    endNodePageNumber?: number;
+    startNodeXMin?: number;
+    startNodeXMax?: number;
+    startNodeYMin?: number;
+    startNodeYMax?: number;
+    startNodeText?: string;
+    endNodeXMin?: number;
+    endNodeXMax?: number;
+    endNodeYMin?: number;
+    endNodeYMax?: number;
+    endNodeText?: string;
+  },
+  {
+    source?: CogniteSourceSystem;
   }
 >;
 
@@ -497,12 +515,64 @@ export type CogniteFileCategory = IndustrialModel<{
   standardReference?: string;
 }>;
 
-export type CogniteActivity = IndustrialModel<
+export type CognitePointCloudModel = IndustrialModel<
   {
     name?: string;
     description?: string;
     tags?: string[];
     aliases?: string[];
+    thumbnail?: NodeId;
+    type?: CognitePointCloudModel_Type;
+  },
+  {
+    thumbnail?: CogniteFile;
+    revisions: CognitePointCloudRevision[];
+  }
+>;
+
+export type CognitePointCloudRevision = IndustrialModel<
+  {
+    status?: CognitePointCloudRevision_Status;
+    published?: boolean;
+    type?: CognitePointCloudRevision_Type;
+    model3D?: NodeId;
+    revisionId?: number;
+  },
+  {
+    model3D?: CognitePointCloudModel;
+  }
+>;
+
+export type CognitePointCloudVolume = IndustrialModel<
+  {
+    name?: string;
+    description?: string;
+    tags?: string[];
+    aliases?: string[];
+    object3D?: NodeId;
+    model3D?: NodeId;
+    volumeReferences?: string[];
+    revisions?: NodeId[];
+    volumeType?: CognitePointCloudVolume_VolumeType;
+    volume?: number[];
+    formatVersion?: string;
+  },
+  {
+    object3D?: Cognite3DObject;
+    model3D?: CogniteCADModel;
+    revisions?: CogniteCADRevision[];
+  }
+>;
+
+export type CogniteSchedulable = IndustrialModel<{
+  startTime?: Date;
+  endTime?: Date;
+  scheduledStartTime?: Date;
+  scheduledEndTime?: Date;
+}>;
+
+export type CogniteSourceable = IndustrialModel<
+  {
     sourceId?: string;
     sourceContext?: string;
     source?: NodeId;
@@ -510,21 +580,20 @@ export type CogniteActivity = IndustrialModel<
     sourceUpdatedTime?: Date;
     sourceCreatedUser?: string;
     sourceUpdatedUser?: string;
-    startTime?: Date;
-    endTime?: Date;
-    scheduledStartTime?: Date;
-    scheduledEndTime?: Date;
-    assets?: NodeId[];
-    equipment?: NodeId[];
-    timeSeries?: NodeId[];
   },
   {
     source?: CogniteSourceSystem;
-    assets?: CogniteAsset[];
-    equipment?: CogniteEquipment[];
-    timeSeries?: CogniteTimeSeries[];
   }
 >;
+
+export type CogniteSourceSystem = IndustrialModel<{
+  name?: string;
+  description?: string;
+  tags?: string[];
+  aliases?: string[];
+  version?: string;
+  manufacturer?: string;
+}>;
 
 export type CogniteTimeSeries = IndustrialModel<
   {
@@ -540,7 +609,7 @@ export type CogniteTimeSeries = IndustrialModel<
     sourceCreatedUser?: string;
     sourceUpdatedUser?: string;
     isStep: boolean;
-    type: string;
+    type: CogniteTimeSeries_Type;
     sourceUnit?: string;
     unit?: NodeId;
     assets?: NodeId[];
@@ -555,60 +624,6 @@ export type CogniteTimeSeries = IndustrialModel<
   }
 >;
 
-export type CogniteAnnotation = IndustrialModel<
-  {
-    name?: string;
-    description?: string;
-    tags?: string[];
-    aliases?: string[];
-    sourceId?: string;
-    sourceContext?: string;
-    source?: NodeId;
-    sourceCreatedTime?: Date;
-    sourceUpdatedTime?: Date;
-    sourceCreatedUser?: string;
-    sourceUpdatedUser?: string;
-    confidence?: number;
-    status?: string;
-  },
-  {
-    source?: CogniteSourceSystem;
-  }
->;
-
-export type CogniteDiagramAnnotation = IndustrialModel<
-  {
-    name?: string;
-    description?: string;
-    tags?: string[];
-    aliases?: string[];
-    sourceId?: string;
-    sourceContext?: string;
-    source?: NodeId;
-    sourceCreatedTime?: Date;
-    sourceUpdatedTime?: Date;
-    sourceCreatedUser?: string;
-    sourceUpdatedUser?: string;
-    confidence?: number;
-    status?: string;
-    startNodePageNumber?: number;
-    endNodePageNumber?: number;
-    startNodeXMin?: number;
-    startNodeXMax?: number;
-    startNodeYMin?: number;
-    startNodeYMax?: number;
-    startNodeText?: string;
-    endNodeXMin?: number;
-    endNodeXMax?: number;
-    endNodeYMin?: number;
-    endNodeYMax?: number;
-    endNodeText?: string;
-  },
-  {
-    source?: CogniteSourceSystem;
-  }
->;
-
 export type CogniteUnit = IndustrialModel<{
   name?: string;
   description?: string;
@@ -620,40 +635,49 @@ export type CogniteUnit = IndustrialModel<{
   sourceReference?: string;
 }>;
 
+export type CogniteVisualizable = IndustrialModel<
+  {
+    object3D?: NodeId;
+  },
+  {
+    object3D?: Cognite3DObject;
+  }
+>;
+
 export interface CogniteCoreModelByView {
-  CogniteDescribable: CogniteDescribable;
-  CogniteSourceable: CogniteSourceable;
-  CogniteSourceSystem: CogniteSourceSystem;
-  CogniteSchedulable: CogniteSchedulable;
-  CogniteVisualizable: CogniteVisualizable;
-  Cognite3DTransformation: Cognite3DTransformation;
-  CogniteCubeMap: CogniteCubeMap;
-  Cognite3DObject: Cognite3DObject;
-  Cognite3DModel: Cognite3DModel;
-  CogniteCADModel: CogniteCADModel;
-  Cognite3DRevision: Cognite3DRevision;
-  CognitePointCloudModel: CognitePointCloudModel;
-  Cognite360ImageModel: Cognite360ImageModel;
-  CogniteCADRevision: CogniteCADRevision;
-  CognitePointCloudRevision: CognitePointCloudRevision;
-  Cognite360ImageCollection: Cognite360ImageCollection;
-  CogniteCADNode: CogniteCADNode;
-  CognitePointCloudVolume: CognitePointCloudVolume;
   Cognite360Image: Cognite360Image;
-  Cognite360ImageStation: Cognite360ImageStation;
   Cognite360ImageAnnotation: Cognite360ImageAnnotation;
+  Cognite360ImageCollection: Cognite360ImageCollection;
+  Cognite360ImageModel: Cognite360ImageModel;
+  Cognite360ImageStation: Cognite360ImageStation;
+  Cognite3DModel: Cognite3DModel;
+  Cognite3DObject: Cognite3DObject;
+  Cognite3DRevision: Cognite3DRevision;
+  Cognite3DTransformation: Cognite3DTransformation;
+  CogniteActivity: CogniteActivity;
+  CogniteAnnotation: CogniteAnnotation;
   CogniteAsset: CogniteAsset;
   CogniteAssetClass: CogniteAssetClass;
   CogniteAssetType: CogniteAssetType;
+  CogniteCADModel: CogniteCADModel;
+  CogniteCADNode: CogniteCADNode;
+  CogniteCADRevision: CogniteCADRevision;
+  CogniteCubeMap: CogniteCubeMap;
+  CogniteDescribable: CogniteDescribable;
+  CogniteDiagramAnnotation: CogniteDiagramAnnotation;
   CogniteEquipment: CogniteEquipment;
   CogniteEquipmentType: CogniteEquipmentType;
   CogniteFile: CogniteFile;
   CogniteFileCategory: CogniteFileCategory;
-  CogniteActivity: CogniteActivity;
+  CognitePointCloudModel: CognitePointCloudModel;
+  CognitePointCloudRevision: CognitePointCloudRevision;
+  CognitePointCloudVolume: CognitePointCloudVolume;
+  CogniteSchedulable: CogniteSchedulable;
+  CogniteSourceable: CogniteSourceable;
+  CogniteSourceSystem: CogniteSourceSystem;
   CogniteTimeSeries: CogniteTimeSeries;
-  CogniteAnnotation: CogniteAnnotation;
-  CogniteDiagramAnnotation: CogniteDiagramAnnotation;
   CogniteUnit: CogniteUnit;
+  CogniteVisualizable: CogniteVisualizable;
 }
 
 export type CogniteCoreModel<TView extends CogniteCoreViewExternalId> =
@@ -681,7 +705,7 @@ export type CogniteCoreAggregateExecutor<TView extends CogniteCoreViewExternalId
   options?: TOptions,
 ) => Promise<
   AggregateResult<
-    AggregateResultItem<CogniteCoreModel<TView>, TOptions["groupBy"], TOptions["aggregate"]>
+    AggregateResultItemForOptions<CogniteCoreModel<TView>, TOptions & { viewExternalId: TView }>
   >
 >;
 

@@ -2,6 +2,8 @@
 
 The `industrial-model` package includes a CLI that connects to Cognite Data Fusion, reads a data model's view definitions, and generates fully-typed TypeScript code.
 
+Committed Cognite Core types in this repository (`src/cognite-core/types.ts`) are generated from `test/fixtures/cognite-core-data-model.json`. Regenerate them with `npm run generate:cognite-core`. `src/cognite-core/client.ts` is hand-maintained and is not overwritten.
+
 ## Generated output
 
 For a data model with views `Equipment` and `Facility`, the CLI produces:

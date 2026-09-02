@@ -8,10 +8,9 @@ import {
   makeCogniteMock,
 } from "./fixtures/index.js";
 
-type PointCloudVolume = {
-  name: string;
-  volume: number;
-  volumeType: string;
+type Transform = {
+  scaleX: number;
+  translationX: number;
 };
 
 describe("AggregateMapper", () => {
@@ -21,7 +20,7 @@ describe("AggregateMapper", () => {
     const request = await mapper.map<{ name: string; sourceId: string }>({
       viewExternalId: "CogniteAsset",
       groupBy: { name: true, sourceId: true },
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       filters: { name: { eq: "Pump" } },
     });
 
@@ -43,7 +42,7 @@ describe("AggregateMapper", () => {
   it("omits filter when no filters are provided", async () => {
     const request = await mapper.map({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
     });
 
     expect(request.filter).toBeUndefined();
@@ -58,7 +57,7 @@ describe("AggregateMapper", () => {
 
     const request = await searchMapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       filters: { name: { search: { query: "pump" } } },
     });
 
@@ -79,7 +78,7 @@ describe("AggregateMapper", () => {
 
     const request = await searchMapper.map<{ name: string; sourceId: string }>({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       filters: {
         name: { search: { query: "pump" } },
         sourceId: { eq: "sap" },
@@ -95,21 +94,21 @@ describe("AggregateMapper", () => {
   });
 
   it.each([
-    ["avg", { avg: "volume" }, { avg: { property: "volume" } }],
-    ["min", { min: "volume" }, { min: { property: "volume" } }],
-    ["max", { max: "volume" }, { max: { property: "volume" } }],
-    ["sum", { sum: "volume" }, { sum: { property: "volume" } }],
+    ["avg", { avg: "scaleX" }, { avg: { property: "scaleX" } }],
+    ["min", { min: "scaleX" }, { min: { property: "scaleX" } }],
+    ["max", { max: "scaleX" }, { max: { property: "scaleX" } }],
+    ["sum", { sum: "scaleX" }, { sum: { property: "scaleX" } }],
   ] as const)("maps %s on a numeric property", async (_label, aggregate, expectedAggregate) => {
-    const request = await mapper.map<PointCloudVolume>({
-      viewExternalId: "CognitePointCloudVolume",
-      aggregate: aggregate as AggregateDefinition<PointCloudVolume>,
+    const request = await mapper.map<Transform>({
+      viewExternalId: "Cognite3DTransformation",
+      aggregates: [aggregate as AggregateDefinition<Transform>],
     });
 
     expect(request).toMatchObject({
       instanceType: "node",
       limit: 1000,
       aggregates: [expectedAggregate],
-      view: expect.objectContaining({ externalId: "CognitePointCloudVolume" }),
+      view: expect.objectContaining({ externalId: "Cognite3DTransformation" }),
     });
     expect(request.groupBy).toBeUndefined();
   });
@@ -117,7 +116,7 @@ describe("AggregateMapper", () => {
   it("maps count with an empty object as row count", async () => {
     const request = await mapper.map({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
     });
 
     expect(request.aggregates).toEqual([{ count: {} }]);
@@ -126,7 +125,7 @@ describe("AggregateMapper", () => {
   it("maps count on a groupable property", async () => {
     const request = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: "name" },
+      aggregates: [{ count: "name" }],
     });
 
     expect(request.aggregates).toEqual([{ count: { property: "name" } }]);
@@ -135,7 +134,7 @@ describe("AggregateMapper", () => {
   it("maps count on node metadata properties", async () => {
     const request = await mapper.map({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: "externalId" },
+      aggregates: [{ count: "externalId" }],
     });
 
     expect(request.aggregates).toEqual([{ count: { property: "externalId" } }]);
@@ -155,25 +154,123 @@ describe("AggregateMapper", () => {
     await expect(
       mapper.map({
         viewExternalId: "CogniteAsset",
-        aggregate: { avg: "name" },
+        aggregates: [{ avg: "name" }],
       }),
     ).rejects.toThrow(/numeric view property/);
   });
 
-  it("rejects list properties in groupBy", async () => {
+  it("maps list primitive groupBy to Cognite property names", async () => {
+    const request = await mapper.map<{ tags: string[] }>({
+      viewExternalId: "CogniteAsset",
+      groupBy: { tags: true },
+      aggregates: [{ count: {} }],
+    });
+
+    expect(request.groupBy).toEqual(["tags"]);
+    expect(request.aggregates).toEqual([{ count: {} }]);
+  });
+
+  it("maps list direct-relation groupBy to Cognite property names", async () => {
+    const request = await mapper.map<{ assets: { space: string; externalId: string }[] }>({
+      viewExternalId: "CogniteTimeSeries",
+      groupBy: { assets: true },
+      aggregates: [{ count: "externalId" }],
+    });
+
+    expect(request.groupBy).toEqual(["assets"]);
+    expect(request.aggregates).toEqual([{ count: { property: "externalId" } }]);
+  });
+
+  it("maps multiple aggregates in request order", async () => {
+    const request = await mapper.map<Transform>({
+      viewExternalId: "Cognite3DTransformation",
+      groupBy: { translationX: true },
+      aggregates: [{ count: "externalId" }, { sum: "scaleX" }],
+    });
+
+    expect(request.groupBy).toEqual(["translationX"]);
+    expect(request.aggregates).toEqual([
+      { count: { property: "externalId" } },
+      { sum: { property: "scaleX" } },
+    ]);
+  });
+
+  it("maps a single aggregate object without wrapping it in an array", async () => {
+    const request = await mapper.map({
+      viewExternalId: "CogniteAsset",
+      aggregates: { count: {} },
+    });
+
+    expect(request.aggregates).toEqual([{ count: {} }]);
+  });
+
+  it("maps the legacy aggregate option as a single op", async () => {
+    const request = await mapper.map({
+      viewExternalId: "CogniteAsset",
+      aggregate: { count: {} },
+    });
+
+    expect(request.aggregates).toEqual([{ count: {} }]);
+  });
+
+  it("rejects setting both aggregate and aggregates", async () => {
     await expect(
       mapper.map({
         viewExternalId: "CogniteAsset",
-        groupBy: { tags: true },
+        aggregate: { count: {} },
+        aggregates: [{ count: {} }],
       }),
-    ).rejects.toThrow(/Invalid aggregate options/);
+    ).rejects.toThrow(/cannot set both aggregate and aggregates/);
+  });
+
+  it("rejects empty aggregates array", async () => {
+    await expect(
+      mapper.map({
+        viewExternalId: "CogniteAsset",
+        aggregates: [],
+      }),
+    ).rejects.toThrow(/at least one aggregate definition/);
+  });
+
+  it("rejects more than five aggregate operations", async () => {
+    await expect(
+      mapper.map<Transform>({
+        viewExternalId: "Cognite3DTransformation",
+        aggregates: [
+          { count: {} },
+          { count: "externalId" },
+          { avg: "scaleX" },
+          { min: "scaleX" },
+          { max: "scaleX" },
+          { sum: "scaleX" },
+        ],
+      }),
+    ).rejects.toThrow(/at most 5 operations/);
+  });
+
+  it("rejects numeric aggregates on list properties", async () => {
+    await expect(
+      mapper.map({
+        viewExternalId: "CognitePointCloudVolume",
+        aggregates: [{ avg: "volume" }],
+      }),
+    ).rejects.toThrow(/numeric view property/);
+  });
+
+  it("rejects count on a list property", async () => {
+    await expect(
+      mapper.map({
+        viewExternalId: "CogniteAsset",
+        aggregates: [{ count: "tags" }],
+      } as never),
+    ).rejects.toThrow(/cannot be counted/);
   });
 
   it("rejects invalid search filters in aggregate requests", async () => {
     await expect(
       mapper.map<{ name: string }>({
         viewExternalId: "CogniteAsset",
-        aggregate: { count: {} },
+        aggregates: [{ count: {} }],
         filters: { name: { search: { query: "pump", operator: "NEAR" } } } as never,
       }),
     ).rejects.toThrow(/filters\.name\.search\.operator/);
@@ -200,6 +297,6 @@ describe("AggregateMapper", () => {
       mapper.map({
         viewExternalId: "CogniteAsset",
       }),
-    ).rejects.toThrow(/either groupBy or aggregate must be provided/);
+    ).rejects.toThrow(/either groupBy, aggregate, or aggregates must be provided/);
   });
 });

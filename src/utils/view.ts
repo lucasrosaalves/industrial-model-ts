@@ -81,12 +81,21 @@ const NUMERIC_PROPERTY_TYPES = new Set(["int32", "int64", "float32", "float64"])
 
 export function isGroupableProperty(property: ViewDefinitionProperty): boolean {
   if (!isViewPropertyDefinition(property)) return false;
-  if (property.type.list === true) return false;
   const type = property.type.type;
-  return type != null && GROUPABLE_PROPERTY_TYPES.has(type);
+  if (type == null || !GROUPABLE_PROPERTY_TYPES.has(type)) return false;
+  // Cognite explodes list properties (direct relations and primitive arrays).
+  return true;
+}
+
+/** Countable properties are groupable scalars — list fields can be grouped, not counted. */
+export function isCountableProperty(property: ViewDefinitionProperty): boolean {
+  if (!isViewPropertyDefinition(property)) return false;
+  if (property.type.list === true) return false;
+  return isGroupableProperty(property);
 }
 
 export function isNumericProperty(property: ViewPropertyDefinition): boolean {
+  if (property.type.list === true) return false;
   const type = property.type.type;
   return type != null && NUMERIC_PROPERTY_TYPES.has(type);
 }

@@ -79,7 +79,8 @@ export class ${config.clientName}Client {
       options: Omit<AggregateOptions<${config.clientName}Model<TView>>, "viewExternalId"> = {},
     ) => aggregate({ ...options, viewExternalId });
 
-    return execute as ${config.clientName}AggregateExecutor<TView>;
+    // Executor options omit viewExternalId; the executor type adds it back for result inference.
+    return execute as unknown as ${config.clientName}AggregateExecutor<TView>;
   }
 
   upsert<TView extends ${config.clientName}ViewExternalId>(

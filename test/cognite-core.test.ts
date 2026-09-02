@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import type { NodeDefinition } from "../src/cognite";
 import { COGNITE_CORE_DATA_MODEL, CogniteCoreClient } from "../src/cognite-core/index.js";
 import {
+  makeCognite3DTransformationMultiAggregateResponse,
   makeCogniteAssetAggregateByNameResponse,
+  makeCogniteAssetAggregateByTagResponse,
   makeCogniteAssetQueryResult,
   makeCogniteClientMock,
+  makeCogniteTimeSeriesAggregateByAssetResponse,
 } from "./fixtures/index.js";
 
 const SPACE = "cdf_cdm";
@@ -281,7 +284,7 @@ describe("Cognite Core module", () => {
 
     const { items } = await core.aggregate("CogniteAsset")({
       groupBy: { name: true },
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       filters: { name: { prefix: "Root" } },
     });
 
@@ -300,9 +303,134 @@ describe("Cognite Core module", () => {
       }),
     );
     expect(items).toEqual([
-      { group: { name: "Root Asset" }, aggregate: { value: 3 } },
-      { group: { name: "Parent Asset" }, aggregate: { value: 1 } },
+      {
+        group: { name: "Root Asset" },
+        aggregates: [{ aggregate: "count", value: 3 }],
+        aggregate: { aggregate: "count", value: 3 },
+      },
+      {
+        group: { name: "Parent Asset" },
+        aggregates: [{ aggregate: "count", value: 1 }],
+        aggregate: { aggregate: "count", value: 1 },
+      },
     ]);
+  });
+
+  it("groups CogniteAsset by tags with list-primitive explode", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteAssetAggregateByTagResponse(),
+    });
+    const core = new CogniteCoreClient(client);
+
+    const { items } = await core.aggregate("CogniteAsset")({
+      groupBy: { tags: true },
+      aggregates: [{ count: {} }],
+    });
+
+    expect(client.instances.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groupBy: ["tags"],
+        aggregates: [{ count: {} }],
+      }),
+    );
+    expect(items).toEqual([
+      {
+        group: { tags: "critical" },
+        aggregates: [{ aggregate: "count", value: 4 }],
+        aggregate: { aggregate: "count", value: 4 },
+      },
+    ]);
+  });
+
+  it("groups CogniteTimeSeries by assets with list-direct-relation explode", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteTimeSeriesAggregateByAssetResponse(),
+    });
+    const core = new CogniteCoreClient(client);
+
+    const { items } = await core.aggregate("CogniteTimeSeries")({
+      groupBy: { assets: true },
+      aggregates: [{ count: {} }],
+    });
+
+    expect(client.instances.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        view: {
+          type: "view",
+          space: "cdf_cdm",
+          externalId: "CogniteTimeSeries",
+          version: "v1",
+        },
+        groupBy: ["assets"],
+        aggregates: [{ count: {} }],
+      }),
+    );
+    expect(items[0]?.group).toEqual({ assets: { space: "asset-space", externalId: "pump-1" } });
+    expect(items[0]?.aggregates).toEqual([{ aggregate: "count", value: 7 }]);
+  });
+
+  it("runs multiple aggregates on Cognite3DTransformation", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCognite3DTransformationMultiAggregateResponse(),
+    });
+    const core = new CogniteCoreClient(client);
+
+    const { items } = await core.aggregate("Cognite3DTransformation")({
+      aggregates: [{ count: {} }, { avg: "scaleX" }, { sum: "translationX" }],
+    });
+
+    expect(client.instances.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aggregates: [
+          { count: {} },
+          { avg: { property: "scaleX" } },
+          { sum: { property: "translationX" } },
+        ],
+      }),
+    );
+    expect(items[0]?.aggregates).toEqual([
+      { aggregate: "count", value: 10 },
+      { aggregate: "avg", property: "scaleX", value: 1.5 },
+      { aggregate: "sum", property: "translationX", value: 42 },
+    ]);
+    expect(items[0]?.aggregate).toEqual({ aggregate: "count", value: 10 });
+  });
+
+  it("accepts object-form aggregates on generated Core views", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteAssetAggregateByNameResponse(),
+    });
+    const core = new CogniteCoreClient(client);
+
+    await core.aggregate("CogniteAsset")({
+      groupBy: { name: true },
+      aggregates: { count: {} },
+    });
+
+    expect(client.instances.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groupBy: ["name"],
+        aggregates: [{ count: {} }],
+      }),
+    );
+  });
+
+  it("accepts the legacy aggregate alias on generated Core views", async () => {
+    const client = makeCogniteClientMock({
+      aggregateResponse: makeCogniteAssetAggregateByNameResponse(),
+    });
+    const core = new CogniteCoreClient(client);
+
+    await core.aggregate("CogniteAsset")({
+      groupBy: { name: true },
+      aggregate: { count: {} },
+    });
+
+    expect(client.instances.aggregate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        aggregates: [{ count: {} }],
+      }),
+    );
   });
 
   it("upserts Cognite Core views without requiring a viewExternalId option", async () => {

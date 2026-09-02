@@ -19,7 +19,7 @@ import type {
   AggregateExecutor,
   AggregateOptions,
   AggregateResult,
-  AggregateResultItem,
+  AggregateResultItemForOptions,
   DataModelId,
   DatapointsExecutor,
   DeleteResult,
@@ -92,9 +92,8 @@ export class IndustrialModelClient {
   aggregate<TModel>(): AggregateExecutor<TModel> {
     const execute = <const TOptions extends AggregateOptions<TModel>>(
       options: TOptions,
-    ): Promise<
-      AggregateResult<AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregate"]>>
-    > => this.aggregateInternal(options);
+    ): Promise<AggregateResult<AggregateResultItemForOptions<TModel, TOptions>>> =>
+      this.aggregateInternal(options);
 
     return execute as unknown as AggregateExecutor<TModel>;
   }
@@ -174,15 +173,13 @@ export class IndustrialModelClient {
 
   private async aggregateInternal<TModel, const TOptions extends AggregateOptions<TModel>>(
     options: TOptions,
-  ): Promise<
-    AggregateResult<AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregate"]>>
-  > {
+  ): Promise<AggregateResult<AggregateResultItemForOptions<TModel, TOptions>>> {
     const cogniteRequest = await this.aggregateMapper.map(options);
     const response = await this.cognite.aggregateInstances(cogniteRequest);
-    const items = this.aggregateResultMapper.map<TModel, TOptions["groupBy"]>(
+    const items = this.aggregateResultMapper.map<TModel>(
       response,
       options,
-    ) as AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregate"]>[];
+    ) as unknown as AggregateResultItemForOptions<TModel, TOptions>[];
     return { items };
   }
 

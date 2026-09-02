@@ -24,7 +24,7 @@ export function renderTypes(
     "import type {",
     "  AggregateOptions,",
     "  AggregateResult,",
-    "  AggregateResultItem,",
+    "  AggregateResultItemForOptions,",
     "  IndustrialModel,",
     "  NodeId,",
     "  QueryOptions,",
@@ -33,7 +33,7 @@ export function renderTypes(
     "  QuerySelect,",
     "  UpsertOptions,",
     "  UpsertResult,",
-    '} from "industrial-model";',
+    `} from "${config.typesModule ?? "industrial-model"}";`,
     "",
   ];
 
@@ -115,9 +115,15 @@ ${relLines.join("\n")}
 >;`;
 }
 
+function modelByViewPropertyName(viewExternalId: string): string {
+  return /^[A-Za-z_$][\w$]*$/.test(viewExternalId)
+    ? viewExternalId
+    : JSON.stringify(viewExternalId);
+}
+
 function renderModelByView(views: ViewDefinition[], config: GeneratorConfig): string {
   return `export interface ${config.clientName}ModelByView {
-${views.map((view) => `  "${view.viewExternalId}": ${view.viewName};`).join("\n")}
+${views.map((view) => `  ${modelByViewPropertyName(view.viewExternalId)}: ${view.viewName};`).join("\n")}
 }
 
 export type ${config.clientName}Model<TView extends ${config.clientName}ViewExternalId> =
@@ -134,7 +140,10 @@ function renderExecutors(config: GeneratorConfig): string {
     },
   ): Promise<QueryResult<QueryResultItem<${name}Model<TView>, TSelect>>>;
   (
-    options?: Omit<QueryOptions<${name}Model<TView>, undefined>, "viewExternalId" | "select"> & {
+    options?: Omit<
+      QueryOptions<${name}Model<TView>, undefined>,
+      "viewExternalId" | "select"
+    > & {
       select?: undefined;
     },
   ): Promise<QueryResult<QueryResultItem<${name}Model<TView>, undefined>>>;
@@ -146,7 +155,7 @@ export type ${name}AggregateExecutor<TView extends ${name}ViewExternalId> = <
   options?: TOptions,
 ) => Promise<
   AggregateResult<
-    AggregateResultItem<${name}Model<TView>, TOptions["groupBy"], TOptions["aggregate"]>
+    AggregateResultItemForOptions<${name}Model<TView>, TOptions & { viewExternalId: TView }>
   >
 >;
 
