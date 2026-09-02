@@ -1,10 +1,16 @@
 # industrial-model
 
+## 0.16.0
+
+### Minor Changes
+
+- 758d3ae: Add a `CachePort` interface and `createCacheResolver` for memoizing data model schema loads beyond a client instance's lifetime. `IndustrialModelClient` accepts new `cache` and `cacheTtlMs` options; `createMemoryCacheAdapter` and `createWebStorageCacheAdapter` (for `localStorage`/`sessionStorage`) are shipped as built-in adapters, and any other store (a file, IndexedDB, a KV service) can implement the same three-method interface.
+
 ## 0.15.0
 
 ### Minor Changes
 
-- Cognite Instances parity: list direct-relation and list primitive `groupBy`, multiple aggregates in one call. **Breaking:** removed legacy singular `aggregate` option and `item.aggregate` result field — use `aggregates` only.
+- 4c228a6: Add `inputs` to `CalculationResult` with the aligned series the formula evaluated, keyed by parameter alias.
 
 ## 0.14.0
 

@@ -1,3 +1,4 @@
+import { type CachePort, type CacheResolver, createCacheResolver } from "../cache";
 import type {
   CognitePort,
   ViewDefinition,
@@ -12,13 +13,29 @@ import {
   isViewPropertyDefinition,
 } from "../utils/view";
 
+export type ViewMapperOptions = {
+  cache?: CachePort;
+  cacheTtlMs?: number;
+};
+
 export class ViewMapper {
-  private cachePromise: Promise<Map<string, ViewDefinition>> | null = null;
+  private readonly resolver: CacheResolver<Map<string, ViewDefinition>>;
 
   constructor(
     private readonly cognite: CognitePort,
     private readonly dataModelId: DataModelId,
-  ) {}
+    options: ViewMapperOptions = {},
+  ) {
+    this.resolver = createCacheResolver<Map<string, ViewDefinition>>({
+      ...(options.cache !== undefined ? { adapter: options.cache } : {}),
+      ...(options.cacheTtlMs !== undefined ? { ttlMs: options.cacheTtlMs } : {}),
+      serialize: (views) => Array.from(views.values()),
+      deserialize: (json) => {
+        const views = json as ViewDefinition[];
+        return new Map(views.map((view) => [view.externalId, view]));
+      },
+    });
+  }
 
   async getView(externalId: string): Promise<ViewDefinition> {
     const views = await this.loadViews();
@@ -37,10 +54,12 @@ export class ViewMapper {
   }
 
   private loadViews(): Promise<Map<string, ViewDefinition>> {
-    if (this.cachePromise == null) {
-      this.cachePromise = this.fetchViews();
-    }
-    return this.cachePromise;
+    return this.resolver.resolve(this.cacheKey(), () => this.fetchViews());
+  }
+
+  private cacheKey(): string {
+    const { space, externalId, version } = this.dataModelId;
+    return `view-mapper:${space}:${externalId}:${version}`;
   }
 
   private async fetchViews(): Promise<Map<string, ViewDefinition>> {

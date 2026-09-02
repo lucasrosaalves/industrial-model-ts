@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createMemoryCacheAdapter } from "../src/cache/index.js";
 import type { NodeDefinition } from "../src/cognite/index.js";
 import { type IndustrialModel, IndustrialModelClient, type NodeId } from "../src/index.js";
 import type { AggregateDefinition } from "../src/types.js";
@@ -1062,5 +1063,30 @@ describe("IndustrialModelClient", () => {
         select: { name: true, sourceCreatedTime: true },
       }),
     ).rejects.toThrow(/Invalid query result/);
+  });
+
+  it("shares a schema cache across separate client instances via the cache option", async () => {
+    const cache = createMemoryCacheAdapter();
+
+    const firstClient = makeCogniteClientMock({ queryItems: makeCogniteAssetQueryResult() });
+    const firstModel = new IndustrialModelClient(firstClient, COGNITE_CORE_DATA_MODEL, { cache });
+    await firstModel.query<IndustrialModel<{ name: string }>>()({
+      viewExternalId: "CogniteAsset",
+      select: { name: true },
+      limit: 10,
+    });
+    expect(firstClient.dataModels.retrieve).toHaveBeenCalledOnce();
+
+    const secondClient = makeCogniteClientMock({ queryItems: makeCogniteAssetQueryResult() });
+    const secondModel = new IndustrialModelClient(secondClient, COGNITE_CORE_DATA_MODEL, {
+      cache,
+    });
+    await secondModel.query<IndustrialModel<{ name: string }>>()({
+      viewExternalId: "CogniteAsset",
+      select: { name: true },
+      limit: 10,
+    });
+
+    expect(secondClient.dataModels.retrieve).not.toHaveBeenCalled();
   });
 });

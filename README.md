@@ -896,6 +896,12 @@ const model = new IndustrialModelClient(
 
 Cognite `date` and `timestamp` view properties are always converted to JavaScript `Date` objects when mapping query results. Result validation optionally parses the full item shape through Zod schemas derived from Cognite view metadata.
 
+## Caching Schema Loads
+
+`IndustrialModelClient` loads view definitions from CDF once and memoizes them for its own lifetime. Pass a `cache` implementing `CachePort` (and optionally `cacheTtlMs`) to persist that schema across page reloads in a browser (`localStorage`/`sessionStorage`) or across process restarts in Node (a file, a KV store, ...) — the library ships adapters for the browser case and an in-memory one, and the interface is small enough to implement for anything else.
+
+See the [Cache documentation](./src/cache/README.md) for the `CachePort` interface, the built-in adapters, and a worked Node file-backed example.
+
 ## Cognite Core Client
 
 For applications working with the Cognite Core Data Model (`cdf_cdm/CogniteCore/v1`), use `CogniteCoreClient` instead of `IndustrialModelClient`. It pre-configures the data model, bundles all view type definitions, and moves the view name to the first positional argument so TypeScript can infer the model type without a generic annotation.
@@ -1146,8 +1152,10 @@ Same as `model.datapoints` on `IndustrialModelClient`. All four methods — `ret
 | `client` | `CogniteClient` | Authenticated Cognite SDK client. |
 | `dataModelId` | `DataModelId` | Data model `space`, `externalId`, and `version`. |
 | `options.validateResults` | `boolean` | Optional. Parse result items with generated Zod schemas. |
+| `options.cache` | `CachePort` | Optional. Persists loaded view definitions beyond the client instance's lifetime. See [Caching Schema Loads](./src/cache/README.md). |
+| `options.cacheTtlMs` | `number` | Optional. Milliseconds after which a cached schema is treated as stale and reloaded. Only relevant with `options.cache`. |
 
-On the first query or aggregation, view definitions are loaded from CDF and cached for the lifetime of the client instance.
+On the first query or aggregation, view definitions are loaded from CDF and memoized. Without `options.cache`, that memoization lives only for the lifetime of the client instance; with `options.cache`, it also persists in whatever store the `CachePort` is backed by (`localStorage`, a file, a KV service, ...).
 
 ### `model.query<TModel>()(options)`
 
