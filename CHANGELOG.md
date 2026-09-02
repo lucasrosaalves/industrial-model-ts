@@ -4,7 +4,7 @@
 
 ### Minor Changes
 
-- Cognite Instances parity: list direct-relation `groupBy` and multiple aggregates in one call.
+- Cognite Instances parity: list direct-relation and list primitive `groupBy`, multiple aggregates in one call. **Breaking:** removed legacy singular `aggregate` option and `item.aggregate` result field — use `aggregates` only.
 
 ## 0.14.0
 

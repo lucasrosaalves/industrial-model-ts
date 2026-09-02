@@ -763,20 +763,20 @@ const { items } = await model.aggregate<CogniteAsset>()({
   groupBy: {
     sourceId: true,
   },
-  aggregate: {
-    count: {},
-  },
+  aggregates: [
+    { count: {} },
+  ],
   filters: {
     name: { prefix: "WMT" },
   },
 });
 
 for (const row of items) {
-  console.log(row.group?.sourceId, row.aggregate?.value);
+  console.log(row.group?.sourceId, row.aggregates?.[0]?.value);
 }
 ```
 
-Omit `aggregate` to list distinct values for grouped fields:
+Omit `aggregates` to list distinct values for grouped fields:
 
 ```ts
 const { items } = await model.aggregate<CogniteAsset>()({
@@ -803,14 +803,12 @@ const { items } = await model.aggregate<PointCloudVolume>()({
   groupBy: {
     volumeType: true,
   },
-  aggregate: {
-    avg: "volume",
-  },
+  aggregates: [{ avg: "volume" }],
 });
 
 items[0]?.group?.volumeType;
-items[0]?.aggregate?.property; // "volume"
-items[0]?.aggregate?.value;
+items[0]?.aggregates?.[0]?.property; // "volume"
+items[0]?.aggregates?.[0]?.value;
 ```
 
 Count all rows matching a filter:
@@ -818,15 +816,13 @@ Count all rows matching a filter:
 ```ts
 const { items } = await model.aggregate<CogniteAsset>()({
   viewExternalId: "CogniteAsset",
-  aggregate: {
-    count: {},
-  },
+  aggregates: [{ count: {} }],
   filters: {
     OR: [{ tags: { containsAny: ["critical"] } }, { sourceId: { eq: "sap" } }],
   },
 });
 
-items[0]?.aggregate?.value;
+items[0]?.aggregates?.[0]?.value;
 ```
 
 Group by a direct relation when you need relation IDs in the result:
@@ -837,15 +833,13 @@ const { items } = await model.aggregate<PointCloudVolume>()({
   groupBy: {
     object3D: true,
   },
-  aggregate: {
-    sum: "volume",
-  },
+  aggregates: [{ sum: "volume" }],
 });
 
 items[0]?.group?.object3D?.externalId;
 ```
 
-List **direct** relations (for example `assets: NodeId[]`) are also groupable. Cognite **explodes** the list so each referenced id becomes its own group row (with a single `NodeId` in `group`, not an array):
+List **direct** relations (for example `assets: NodeId[]`) and **primitive** lists (for example `tags: string[]`) are groupable. Cognite **explodes** the list so each element becomes its own group row (a single value in `group`, not an array):
 
 ```ts
 type BaseEvent = IndustrialModel<{
@@ -863,22 +857,17 @@ const { items } = await model.aggregate<BaseEvent>()({
 
 for (const row of items) {
   console.log(row.group?.assets?.externalId, row.aggregates?.[0]?.value, row.aggregates?.[1]?.value);
-  // row.aggregate is the first op (same as aggregates[0]) for backward compatibility
 }
 ```
 
-Other list properties (for example `tags: string[]`) remain rejected in `groupBy`.
-
-Use `aggregates` (plural) when you need multiple Cognite aggregate ops in one call. Prefer it over repeating `aggregate()` for each op. The legacy single `aggregate` option still works and also populates `item.aggregates` as a one-element array.
+Use `aggregates` for one or more Cognite aggregate ops in a single call. Wrap a single op in a one-element array, e.g. `aggregates: [{ count: {} }]`.
 
 Text search filters are also supported in aggregations:
 
 ```ts
 const { items } = await model.aggregate<CogniteAsset>()({
   viewExternalId: "CogniteAsset",
-  aggregate: {
-    count: {},
-  },
+  aggregates: [{ count: {} }],
   filters: {
     name: { search: { query: "compressor seal" } },
   },
@@ -945,14 +934,14 @@ Aggregations use the same positional-view-name pattern:
 ```ts
 const { items } = await core.aggregate("CogniteEquipment")({
   groupBy: { manufacturer: true },
-  aggregate: { count: {} },
+  aggregates: [{ count: {} }],
   filters: {
     equipmentType: { exists: true },
   },
 });
 
 items[0]?.group?.manufacturer;
-items[0]?.aggregate?.value;
+items[0]?.aggregates?.[0]?.value;
 ```
 
 Upserts use the same pattern and infer the item shape from the view name:
@@ -1241,12 +1230,11 @@ type DeleteResult = {
 | Option | Description |
 | --- | --- |
 | `viewExternalId` | View to aggregate. |
-| `groupBy` | Groupable properties set to `true`; max 5 fields. Includes scalars, single direct relations, and **list** direct relations (Cognite explodes list relations into one row per referenced id). |
+| `groupBy` | Groupable properties set to `true`; max 5 fields. Includes scalars, single direct relations, **list** direct relations, and **list** primitives (Cognite explodes lists into one row per element). |
 | `filters` | Same filter syntax as `query()`. |
-| `aggregate` | One of `avg`, `min`, `max`, `sum`, or `count`. Prefer `aggregates` for multiple ops. |
-| `aggregates` | One or more aggregate defs in request/result order. Mutually exclusive with `aggregate`. |
+| `aggregates` | One or more aggregate defs in request/result order. |
 
-Provide at least one of `groupBy` or `aggregate` / `aggregates`. Omit aggregate ops to fetch distinct grouped values. The client requests up to 1000 aggregate rows. Each result item exposes `aggregate` (first value) and `aggregates` (all values when ops were requested).
+Provide at least one of `groupBy` or `aggregates`. Omit `aggregates` to fetch distinct grouped values. The client requests up to 1000 aggregate rows. Each result item exposes `aggregates` when ops were requested.
 
 | Aggregate | Input | Use case |
 | --- | --- | --- |
@@ -1256,6 +1244,8 @@ Provide at least one of `groupBy` or `aggregate` / `aggregates`. Omit aggregate 
 | `min` | `{ min: "volume" }` | Minimum numeric value. |
 | `max` | `{ max: "volume" }` | Maximum numeric value. |
 | `sum` | `{ sum: "volume" }` | Sum of a numeric property. |
+
+Use a one-element array for a single op, e.g. `aggregates: [{ count: {} }]`.
 
 ### `model.files.upload(fileInfo, content?)`
 

@@ -19,12 +19,11 @@ describe("AggregateResultMapper", () => {
 
     const items = mapper.map(response, {
       groupBy: { name: true },
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
     });
 
     expect(items[0]).toEqual({
       group: { name: "Pump A" },
-      aggregate: { value: 5 },
       aggregates: [{ value: 5 }],
     });
   });
@@ -44,13 +43,12 @@ describe("AggregateResultMapper", () => {
       response,
       {
         groupBy: { volumeType: true },
-        aggregate: { avg: "volume" },
+        aggregates: [{ avg: "volume" }],
       },
     );
 
     expect(items[0]).toEqual({
       group: { volumeType: "Cylinder" },
-      aggregate: { property: "volume", value: 12.5 },
       aggregates: [{ property: "volume", value: 12.5 }],
     });
   });
@@ -78,12 +76,31 @@ describe("AggregateResultMapper", () => {
 
     expect(items[0]).toEqual({
       group: { assets: { space: "asset-space", externalId: "asset-1" } },
-      aggregate: { property: "externalId", value: 3 },
       aggregates: [
         { property: "externalId", value: 3 },
         { property: "duration", value: 120 },
       ],
     });
+  });
+
+  it("maps exploded list primitive group values", () => {
+    const response: InstancesAggregateResponse = {
+      items: [
+        {
+          instanceType: "node",
+          group: { tags: "downtime" },
+          aggregates: [{ aggregate: "count", value: 4 }],
+        },
+      ],
+    };
+
+    const items = mapper.map<{ tags: string[] }, { tags: true }>(response, {
+      groupBy: { tags: true },
+      aggregates: [{ count: {} }],
+    });
+
+    expect(items[0]?.group).toEqual({ tags: "downtime" });
+    expect(items[0]?.aggregates).toEqual([{ value: 4 }]);
   });
 
   it("coerces direct-relation group values to NodeId", () => {
@@ -101,14 +118,13 @@ describe("AggregateResultMapper", () => {
 
     const items = mapper.map<{ object3D: NodeId; volume: number }, { object3D: true }>(response, {
       groupBy: { object3D: true },
-      aggregate: { sum: "volume" },
+      aggregates: [{ sum: "volume" }],
     });
 
     expect(items[0]?.group?.object3D).toEqual({
       space: "cdf_3d",
       externalId: "obj-1",
     });
-    expect(items[0]?.aggregate).toEqual({ property: "volume", value: 100 });
     expect(items[0]?.aggregates).toEqual([{ property: "volume", value: 100 }]);
   });
 
@@ -128,11 +144,10 @@ describe("AggregateResultMapper", () => {
 
     const items = mapper.map(response, {
       groupBy: { sourceId: true },
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
     });
 
     expect(items[0]).toEqual({
-      aggregate: { value: 1 },
       aggregates: [{ value: 1 }],
     });
     expect(items[0]).not.toHaveProperty("group");
@@ -152,7 +167,6 @@ describe("AggregateResultMapper", () => {
 
     expect(items).toHaveLength(2);
     expect(items[0]?.group).toEqual({ sourceId: "a" });
-    expect(items[0]).not.toHaveProperty("aggregate");
     expect(items[0]).not.toHaveProperty("aggregates");
   });
 });

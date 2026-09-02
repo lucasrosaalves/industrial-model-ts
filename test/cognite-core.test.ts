@@ -281,7 +281,7 @@ describe("Cognite Core module", () => {
 
     const { items } = await core.aggregate("CogniteAsset")({
       groupBy: { name: true },
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       filters: { name: { prefix: "Root" } },
     });
 
@@ -302,12 +302,10 @@ describe("Cognite Core module", () => {
     expect(items).toEqual([
       {
         group: { name: "Root Asset" },
-        aggregate: { value: 3 },
         aggregates: [{ value: 3 }],
       },
       {
         group: { name: "Parent Asset" },
-        aggregate: { value: 1 },
         aggregates: [{ value: 1 }],
       },
     ]);

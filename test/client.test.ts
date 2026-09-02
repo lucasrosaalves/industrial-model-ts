@@ -849,7 +849,7 @@ describe("IndustrialModelClient", () => {
     const { items } = await model.aggregate<Asset>()({
       viewExternalId: "CogniteAsset",
       groupBy: { name: true },
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       filters: { name: { prefix: "Root" } },
     });
 
@@ -866,7 +866,7 @@ describe("IndustrialModelClient", () => {
     expect(items).toHaveLength(2);
     expect(items[0]).toMatchObject({
       group: { name: "Root Asset" },
-      aggregate: { value: 3 },
+      aggregates: [{ value: 3 }],
     });
   });
 
@@ -882,7 +882,7 @@ describe("IndustrialModelClient", () => {
     type Asset = IndustrialModel<{ name: string }>;
     const { items } = await model.aggregate<Asset>()({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       filters: { name: { search: { query: "root asset" } } },
     });
 
@@ -902,7 +902,7 @@ describe("IndustrialModelClient", () => {
         },
       }),
     );
-    expect(items[0]?.aggregate?.value).toBe(42);
+    expect(items[0]?.aggregates?.[0]?.value).toBe(42);
   });
 
   it("runs aggregate with a global count", async () => {
@@ -914,11 +914,11 @@ describe("IndustrialModelClient", () => {
     type Asset = IndustrialModel<{ name: string }>;
     const { items } = await model.aggregate<Asset>()({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
     });
 
     expect(items).toHaveLength(1);
-    expect(items[0]?.aggregate?.value).toBe(42);
+    expect(items[0]?.aggregates?.[0]?.value).toBe(42);
     expect(items[0]).not.toHaveProperty("group");
   });
 
@@ -939,7 +939,7 @@ describe("IndustrialModelClient", () => {
     expect(aggregateRequest).not.toHaveProperty("aggregates");
     expect(items).toHaveLength(2);
     expect(items[0]?.group?.sourceId).toBe("sap-001");
-    expect(items[0]).not.toHaveProperty("aggregate");
+    expect(items[0]).not.toHaveProperty("aggregates");
   });
 
   it("runs aggregate with avg grouped by volumeType", async () => {
@@ -952,7 +952,7 @@ describe("IndustrialModelClient", () => {
     const { items } = await model.aggregate<Volume>()({
       viewExternalId: "CognitePointCloudVolume",
       groupBy: { volumeType: true },
-      aggregate: { avg: "volume" },
+      aggregates: [{ avg: "volume" }],
     });
 
     expect(client.instances.aggregate).toHaveBeenCalledWith(
@@ -963,7 +963,7 @@ describe("IndustrialModelClient", () => {
     );
     expect(items[0]).toMatchObject({
       group: { volumeType: "Cylinder" },
-      aggregate: { property: "volume", value: 12.5 },
+      aggregates: [{ property: "volume", value: 12.5 }],
     });
   });
 
@@ -982,7 +982,7 @@ describe("IndustrialModelClient", () => {
       op === "min" ? { min: "volume" } : op === "max" ? { max: "volume" } : { sum: "volume" };
     const { items } = await model.aggregate<Volume>()({
       viewExternalId: "CognitePointCloudVolume",
-      aggregate,
+      aggregates: [aggregate],
     });
 
     expect(client.instances.aggregate).toHaveBeenCalledWith(
@@ -990,7 +990,7 @@ describe("IndustrialModelClient", () => {
         aggregates: [{ [op]: { property: "volume" } }],
       }),
     );
-    expect(items[0]?.aggregate).toEqual({ property: "volume", value });
+    expect(items[0]?.aggregates?.[0]).toEqual({ property: "volume", value });
   });
 
   it("runs aggregate with count on a property", async () => {
@@ -1002,7 +1002,7 @@ describe("IndustrialModelClient", () => {
     type Asset = IndustrialModel<{ name: string }>;
     const { items } = await model.aggregate<Asset>()({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: "name" },
+      aggregates: [{ count: "name" }],
     });
 
     expect(client.instances.aggregate).toHaveBeenCalledWith(
@@ -1010,7 +1010,7 @@ describe("IndustrialModelClient", () => {
         aggregates: [{ count: { property: "name" } }],
       }),
     );
-    expect(items[0]?.aggregate).toEqual({ property: "name", value: 15 });
+    expect(items[0]?.aggregates?.[0]).toEqual({ property: "name", value: 15 });
   });
 
   it("maps direct-relation values in groupBy results", async () => {
@@ -1023,14 +1023,14 @@ describe("IndustrialModelClient", () => {
     const { items } = await model.aggregate<Volume>()({
       viewExternalId: "CognitePointCloudVolume",
       groupBy: { object3D: true },
-      aggregate: { sum: "volume" },
+      aggregates: [{ sum: "volume" }],
     });
 
     expect(items[0]?.group?.object3D).toEqual({
       space: "cdf_3d_models",
       externalId: "model-1",
     });
-    expect(items[0]?.aggregate?.value).toBe(100);
+    expect(items[0]?.aggregates?.[0]?.value).toBe(100);
   });
 
   it("throws when aggregate options are invalid", async () => {

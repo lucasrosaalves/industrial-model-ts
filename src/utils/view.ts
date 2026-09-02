@@ -83,9 +83,7 @@ export function isGroupableProperty(property: ViewDefinitionProperty): boolean {
   if (!isViewPropertyDefinition(property)) return false;
   const type = property.type.type;
   if (type == null || !GROUPABLE_PROPERTY_TYPES.has(type)) return false;
-  // Cognite explodes list direct relations into one group row per referenced id.
-  // Other list properties (e.g. text[]) are not groupable.
-  if (property.type.list === true) return type === "direct";
+  // Cognite explodes list properties (direct relations and primitive arrays).
   return true;
 }
 

@@ -15,7 +15,7 @@ import { QueryValidator } from "./query-validator";
 const NODE_COUNT_PROPERTIES = new Set(["externalId", "space"]);
 
 function issuePath(path: PropertyKey[]): string {
-  return path.length === 0 ? "aggregate" : path.map(String).join(".");
+  return path.length === 0 ? "aggregates" : path.map(String).join(".");
 }
 
 function formatZodIssues(error: z.ZodError, path: Array<string | number>): string[] {
@@ -47,20 +47,14 @@ export class AggregateValidator {
     errors.push(...this.validateOptionsShape(options, rootView));
 
     const selectedGroupBy = options.groupBy ? getSelectedGroupByKeys(options.groupBy) : [];
-    const hasAggregate =
-      options.aggregate !== undefined ||
-      (options.aggregates !== undefined && options.aggregates.length > 0);
-
-    if (options.aggregate !== undefined && options.aggregates !== undefined) {
-      errors.push("aggregate: provide either aggregate or aggregates, not both");
-    }
+    const hasAggregates = options.aggregates !== undefined && options.aggregates.length > 0;
 
     if (options.aggregates !== undefined && options.aggregates.length === 0) {
       errors.push("aggregates: must contain at least one aggregate definition");
     }
 
-    if (selectedGroupBy.length === 0 && !hasAggregate) {
-      errors.push("aggregate: either groupBy or aggregate/aggregates must be provided");
+    if (selectedGroupBy.length === 0 && !hasAggregates) {
+      errors.push("aggregates: either groupBy or aggregates must be provided");
     }
 
     if (options.filters !== undefined) {
@@ -71,16 +65,6 @@ export class AggregateValidator {
 
     if (options.groupBy !== undefined) {
       errors.push(...this.validateGroupBy(options.groupBy, rootView, ["groupBy"]));
-    }
-
-    if (options.aggregate !== undefined) {
-      errors.push(
-        ...this.validateAggregate(
-          options.aggregate as AggregateDefinition<Record<string, unknown>>,
-          rootView,
-          ["aggregate"],
-        ),
-      );
     }
 
     if (options.aggregates !== undefined) {
@@ -112,7 +96,6 @@ export class AggregateValidator {
         viewExternalId: z.literal(rootView.externalId),
         filters: z.unknown().optional(),
         groupBy: z.unknown().optional(),
-        aggregate: z.unknown().optional(),
         aggregates: z.unknown().optional(),
       })
       .strict();

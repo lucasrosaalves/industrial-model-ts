@@ -15,6 +15,7 @@ type PointCloudVolume = IndustrialModel<{
 
 type BaseEvent = IndustrialModel<{
   assets: NodeId[];
+  tags: string[];
   duration: number;
   externalId: string;
 }>;
@@ -29,17 +30,14 @@ describe("aggregate typing", () => {
     const { items } = await model.aggregate<PointCloudVolume>()({
       viewExternalId: "CognitePointCloudVolume",
       groupBy: { volumeType: true },
-      aggregate: { avg: "volume" },
+      aggregates: [{ avg: "volume" }],
     });
 
     type Item = (typeof items)[number];
 
     expectTypeOf<Item["group"]>().toEqualTypeOf<{ volumeType: string } | undefined>();
-    expectTypeOf<NonNullable<Item["aggregate"]>["property"]>().toEqualTypeOf<"volume">();
-    expectTypeOf<NonNullable<Item["aggregate"]>["value"]>().toEqualTypeOf<number>();
-    expectTypeOf<NonNullable<Item["aggregates"]>>().toEqualTypeOf<
-      readonly [{ property: "volume"; value: number }]
-    >();
+    expectTypeOf<NonNullable<Item["aggregates"]>[0]["property"]>().toEqualTypeOf<"volume">();
+    expectTypeOf<NonNullable<Item["aggregates"]>[0]["value"]>().toEqualTypeOf<number>();
 
     const first = items[0];
     if (first?.group) {
@@ -47,9 +45,9 @@ describe("aggregate typing", () => {
       // @ts-expect-error name was not included in groupBy
       first.group.name;
     }
-    if (first?.aggregate) {
-      first.aggregate.property;
-      first.aggregate.value;
+    if (first?.aggregates?.[0]) {
+      first.aggregates[0].property;
+      first.aggregates[0].value;
     }
   });
 
@@ -59,10 +57,10 @@ describe("aggregate typing", () => {
 
     const { items } = await model.aggregate<PointCloudVolume>()({
       viewExternalId: "CognitePointCloudVolume",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
     });
 
-    type Aggregate = NonNullable<(typeof items)[number]["aggregate"]>;
+    type Aggregate = NonNullable<(typeof items)[number]["aggregates"]>[0];
     type HasProperty = "property" extends keyof Aggregate ? true : false;
 
     expectTypeOf<HasProperty>().toEqualTypeOf<false>();
@@ -78,10 +76,6 @@ describe("aggregate typing", () => {
     type Item = AggregateResultItemForOptions<BaseEvent, typeof options>;
 
     expectTypeOf<NonNullable<Item["group"]>["assets"]>().toEqualTypeOf<NodeId>();
-    expectTypeOf<NonNullable<Item["aggregate"]>>().toEqualTypeOf<{
-      property: "externalId";
-      value: number;
-    }>();
     expectTypeOf<NonNullable<Item["aggregates"]>[0]>().toEqualTypeOf<{
       property: "externalId";
       value: number;
@@ -93,5 +87,18 @@ describe("aggregate typing", () => {
 
     // Prove groupBy accepts NodeId[] fields at the options layer
     expectTypeOf(options.groupBy).toEqualTypeOf<{ readonly assets: true }>();
+  });
+
+  it("allows list primitive groupBy with exploded scalar in group", () => {
+    const options = {
+      viewExternalId: "BaseEvent",
+      groupBy: { tags: true },
+      aggregates: [{ count: "externalId" }],
+    } as const satisfies AggregateOptions<BaseEvent>;
+
+    type Item = AggregateResultItemForOptions<BaseEvent, typeof options>;
+
+    expectTypeOf<NonNullable<Item["group"]>["tags"]>().toEqualTypeOf<string>();
+    expectTypeOf(options.groupBy).toEqualTypeOf<{ readonly tags: true }>();
   });
 });

@@ -54,13 +54,10 @@ export class AggregateMapper {
 }
 
 function resolveAggregateDefinitions<TModel>(
-  options: Pick<AggregateOptions<TModel>, "aggregate" | "aggregates">,
+  options: Pick<AggregateOptions<TModel>, "aggregates">,
 ): AggregateDefinition<TModel>[] {
   if (options.aggregates !== undefined) {
     return [...options.aggregates];
-  }
-  if (options.aggregate !== undefined) {
-    return [options.aggregate];
   }
   return [];
 }

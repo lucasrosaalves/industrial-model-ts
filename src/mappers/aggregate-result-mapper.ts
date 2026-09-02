@@ -20,13 +20,10 @@ function isNodeId(value: unknown): value is NodeId {
 }
 
 function resolveAggregateDefinitions<TModel>(
-  options: Pick<AggregateOptions<TModel>, "aggregate" | "aggregates">,
+  options: Pick<AggregateOptions<TModel>, "aggregates">,
 ): AggregateDefinition<TModel>[] {
   if (options.aggregates !== undefined) {
     return [...options.aggregates];
-  }
-  if (options.aggregate !== undefined) {
-    return [options.aggregate];
   }
   return [];
 }
@@ -43,7 +40,7 @@ function mapAggregateValue(
 export class AggregateResultMapper {
   map<TModel, TGroupBy extends AggregateGroupBy<TModel> | undefined>(
     response: InstancesAggregateResponse,
-    options: Pick<AggregateOptions<TModel>, "groupBy" | "aggregate" | "aggregates">,
+    options: Pick<AggregateOptions<TModel>, "groupBy" | "aggregates">,
   ): AggregateResultItem<TModel, TGroupBy>[] {
     const groupByKeys = options.groupBy ? getSelectedGroupByKeys(options.groupBy) : [];
     const requestedOps = resolveAggregateDefinitions(options);
@@ -71,11 +68,8 @@ export class AggregateResultMapper {
               .filter((value): value is NonNullable<typeof value> => value !== undefined)
           : undefined;
 
-      const aggregate = aggregates?.[0];
-
       return {
         ...(group !== undefined ? { group } : {}),
-        ...(aggregate !== undefined ? { aggregate } : {}),
         ...(aggregates !== undefined && aggregates.length > 0 ? { aggregates } : {}),
       } as unknown as AggregateResultItem<TModel, TGroupBy>;
     });

@@ -60,6 +60,7 @@ Fallback without IM change: **N×** `baseEvent.query({ limit: 1, … })`.
 | # | Feature | Cognite capability | IM change |
 |---|---------|----------------------|-----------|
 | **1** | List direct-relation `groupBy` | `groupBy: ["assets"]` | Allow list **direct** relations in types + `isGroupableProperty` + validator |
+| **1b** | List primitive `groupBy` | `groupBy: ["tags"]` | Allow list primitives (e.g. `text[]`); explode to scalar in `group` types |
 | **2** | Multi-aggregate in one call | `aggregates: [count, sum, …]` | Accept multiple aggregate defs; map all; map all result values |
 
 ### Out of scope (do **not** implement in this pass unless user asks)
@@ -86,8 +87,6 @@ type AggregateOptions<TModel> = {
   viewExternalId: string;
   filters?: WhereInput<TModel>;
   groupBy?: AggregateGroupBy<TModel>; // now includes list direct relations (NodeId[])
-  /** @deprecated Prefer `aggregates` when multiple ops are needed. Still supported. */
-  aggregate?: AggregateDefinition<TModel>;
   /** One or more Cognite aggregate ops (order preserved in the request and results). */
   aggregates?: readonly AggregateDefinition<TModel>[];
 };
@@ -95,24 +94,18 @@ type AggregateOptions<TModel> = {
 
 Rules:
 
-- Exactly one of `aggregate` | `aggregates` may carry ops (or allow both only if `aggregates` is absent and `aggregate` is set — avoid double-send).
-- Provide at least one of `groupBy` or aggregate op(s) (same rule as today).
+- Provide at least one of `groupBy` or `aggregates` (same rule as today).
 - Max groupBy fields: keep existing max **5** unless Cognite docs require otherwise.
-- List `groupBy` **only** for direct relations with `type.list === true` and `type.type === "direct"` — do **not** open groupBy for arbitrary list primitives unless Cognite documents support.
+- List `groupBy` for direct relations (`type.list === true`, `type.type === "direct"`) and primitive lists (`text[]`, numeric arrays, etc.) — Cognite explodes each list element into one group row.
 
 **Result shape (additive):**
 
 ```ts
 type AggregateResultItem<…> = {
   group?: GroupValues<…>;
-  /** First aggregate value — keep for existing consumers. */
-  aggregate?: AggregateValue<…>;
-  /** All aggregate values when `aggregates` (or mapped from single `aggregate`) was used. */
-  aggregates?: ReadonlyArray<AggregateValue<…> & { /* optional: op tag if useful */ }>;
+  aggregates?: ReadonlyArray<AggregateValue<…>>;
 };
 ```
-
-When only legacy `aggregate` is passed, keep today’s `item.aggregate` behavior; also populate `item.aggregates` with a one-element array if that simplifies code (document either way).
 
 **Example target call (consumer intent):**
 

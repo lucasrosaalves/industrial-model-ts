@@ -21,7 +21,7 @@ describe("AggregateMapper", () => {
     const request = await mapper.map<{ name: string; sourceId: string }>({
       viewExternalId: "CogniteAsset",
       groupBy: { name: true, sourceId: true },
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       filters: { name: { eq: "Pump" } },
     });
 
@@ -43,7 +43,7 @@ describe("AggregateMapper", () => {
   it("omits filter when no filters are provided", async () => {
     const request = await mapper.map({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
     });
 
     expect(request.filter).toBeUndefined();
@@ -58,7 +58,7 @@ describe("AggregateMapper", () => {
 
     const request = await searchMapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       filters: { name: { search: { query: "pump" } } },
     });
 
@@ -79,7 +79,7 @@ describe("AggregateMapper", () => {
 
     const request = await searchMapper.map<{ name: string; sourceId: string }>({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
       filters: {
         name: { search: { query: "pump" } },
         sourceId: { eq: "sap" },
@@ -102,7 +102,7 @@ describe("AggregateMapper", () => {
   ] as const)("maps %s on a numeric property", async (_label, aggregate, expectedAggregate) => {
     const request = await mapper.map<PointCloudVolume>({
       viewExternalId: "CognitePointCloudVolume",
-      aggregate: aggregate as AggregateDefinition<PointCloudVolume>,
+      aggregates: [aggregate as AggregateDefinition<PointCloudVolume>],
     });
 
     expect(request).toMatchObject({
@@ -117,7 +117,7 @@ describe("AggregateMapper", () => {
   it("maps count with an empty object as row count", async () => {
     const request = await mapper.map({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: {} },
+      aggregates: [{ count: {} }],
     });
 
     expect(request.aggregates).toEqual([{ count: {} }]);
@@ -126,7 +126,7 @@ describe("AggregateMapper", () => {
   it("maps count on a groupable property", async () => {
     const request = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: "name" },
+      aggregates: [{ count: "name" }],
     });
 
     expect(request.aggregates).toEqual([{ count: { property: "name" } }]);
@@ -135,7 +135,7 @@ describe("AggregateMapper", () => {
   it("maps count on node metadata properties", async () => {
     const request = await mapper.map({
       viewExternalId: "CogniteAsset",
-      aggregate: { count: "externalId" },
+      aggregates: [{ count: "externalId" }],
     });
 
     expect(request.aggregates).toEqual([{ count: { property: "externalId" } }]);
@@ -155,25 +155,27 @@ describe("AggregateMapper", () => {
     await expect(
       mapper.map({
         viewExternalId: "CogniteAsset",
-        aggregate: { avg: "name" },
+        aggregates: [{ avg: "name" }],
       }),
     ).rejects.toThrow(/numeric view property/);
   });
 
-  it("rejects non-groupable list properties in groupBy", async () => {
-    await expect(
-      mapper.map({
-        viewExternalId: "CogniteAsset",
-        groupBy: { tags: true },
-      }),
-    ).rejects.toThrow(/Invalid aggregate options/);
+  it("maps list primitive groupBy to Cognite property names", async () => {
+    const request = await mapper.map<{ tags: string[] }>({
+      viewExternalId: "CogniteAsset",
+      groupBy: { tags: true },
+      aggregates: [{ count: {} }],
+    });
+
+    expect(request.groupBy).toEqual(["tags"]);
+    expect(request.aggregates).toEqual([{ count: {} }]);
   });
 
   it("maps list direct-relation groupBy to Cognite property names", async () => {
     const request = await mapper.map<{ assets: { space: string; externalId: string }[] }>({
       viewExternalId: "CogniteTimeSeries",
       groupBy: { assets: true },
-      aggregate: { count: "externalId" },
+      aggregates: [{ count: "externalId" }],
     });
 
     expect(request.groupBy).toEqual(["assets"]);
@@ -194,14 +196,13 @@ describe("AggregateMapper", () => {
     ]);
   });
 
-  it("rejects providing both aggregate and aggregates", async () => {
+  it("rejects legacy aggregate option", async () => {
     await expect(
       mapper.map({
         viewExternalId: "CogniteAsset",
         aggregate: { count: {} },
-        aggregates: [{ count: {} }],
-      }),
-    ).rejects.toThrow(/either aggregate or aggregates/);
+      } as never),
+    ).rejects.toThrow(/Invalid aggregate options/);
   });
 
   it("rejects empty aggregates array", async () => {
@@ -217,7 +218,7 @@ describe("AggregateMapper", () => {
     await expect(
       mapper.map<{ name: string }>({
         viewExternalId: "CogniteAsset",
-        aggregate: { count: {} },
+        aggregates: [{ count: {} }],
         filters: { name: { search: { query: "pump", operator: "NEAR" } } } as never,
       }),
     ).rejects.toThrow(/filters\.name\.search\.operator/);
@@ -244,6 +245,6 @@ describe("AggregateMapper", () => {
       mapper.map({
         viewExternalId: "CogniteAsset",
       }),
-    ).rejects.toThrow(/either groupBy or aggregate\/aggregates must be provided/);
+    ).rejects.toThrow(/either groupBy or aggregates must be provided/);
   });
 });

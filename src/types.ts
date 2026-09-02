@@ -218,7 +218,13 @@ type GroupableValue<T> =
       ? true
       : NonNull<T> extends string | number | boolean
         ? true
-        : false;
+        : NonNull<T> extends readonly string[]
+          ? true
+          : NonNull<T> extends readonly number[]
+            ? true
+            : NonNull<T> extends readonly boolean[]
+              ? true
+              : false;
 
 export type GroupByKey<TModel> = {
   [K in keyof ModelProps<TModel>]: GroupableValue<ModelProps<TModel>[K]> extends true ? K : never;
@@ -248,8 +254,13 @@ type SelectedGroupKeys<TGroupBy> = Extract<
   string
 >;
 
-/** Cognite explodes list direct relations: each group row carries a single NodeId. */
-type GroupValueForProp<T> = NonNull<T> extends readonly NodeId[] ? NodeId : T;
+/** Cognite explodes list properties: each group row carries a single element, not an array. */
+type GroupValueForProp<T> =
+  NonNull<T> extends readonly unknown[]
+    ? NonNull<T> extends readonly NodeId[]
+      ? NodeId
+      : ArrayItem<NonNull<T>>
+    : T;
 
 export type GroupValues<TModel, TGroupBy extends AggregateGroupBy<TModel> | undefined> =
   TGroupBy extends AggregateGroupBy<TModel>
@@ -274,64 +285,31 @@ export type AggregateValue<TDef> = TDef extends { avg: infer P extends PropertyK
             : { property: P; value: number }
           : never;
 
-type FirstAggregateDefinition<TAggregate, TAggregates> = TAggregates extends readonly [
-  infer First,
-  ...unknown[],
-]
-  ? First
-  : TAggregate;
-
-type AggregateValuesTuple<TAggregate, TAggregates> = [TAggregates] extends [undefined]
-  ? [TAggregate] extends [undefined]
-    ? undefined
-    : readonly [AggregateValue<TAggregate>]
-  : TAggregates extends readonly unknown[]
-    ? { readonly [I in keyof TAggregates]: AggregateValue<TAggregates[I]> }
-    : undefined;
+type AggregateValuesTuple<TAggregates> = TAggregates extends readonly unknown[]
+  ? { readonly [I in keyof TAggregates]: AggregateValue<TAggregates[I]> }
+  : undefined;
 
 export type AggregateOptions<TModel> = {
   viewExternalId: string;
   filters?: WhereInput<TModel>;
   groupBy?: AggregateGroupBy<TModel>;
-  /**
-   * Single aggregate operation.
-   * Prefer `aggregates` when multiple ops are needed in one call.
-   */
-  aggregate?: AggregateDefinition<TModel>;
   /** One or more Cognite aggregate ops (order preserved in the request and results). */
   aggregates?: readonly AggregateDefinition<TModel>[];
 };
 
-type AggregateResultOps<TModel, TOptions extends AggregateOptions<TModel>> = TOptions extends {
-  aggregates: infer TAggregates extends readonly AggregateDefinition<TModel>[];
-}
-  ? { aggregate: undefined; aggregates: TAggregates }
-  : TOptions extends { aggregate: infer TAggregate extends AggregateDefinition<TModel> }
-    ? { aggregate: TAggregate; aggregates: undefined }
-    : { aggregate: undefined; aggregates: undefined };
-
 export type AggregateResultItem<
   TModel,
   TGroupBy extends AggregateGroupBy<TModel> | undefined = undefined,
-  TAggregate extends AggregateDefinition<TModel> | undefined = undefined,
   TAggregates extends readonly AggregateDefinition<TModel>[] | undefined = undefined,
 > = {
   group?: GroupValues<TModel, TGroupBy>;
-  /** First aggregate value (legacy single-op field; also set when using `aggregates`). */
-  aggregate?: AggregateValue<FirstAggregateDefinition<TAggregate, TAggregates>>;
-  /** All aggregate values when ops were requested (single `aggregate` becomes a 1-element array). */
-  aggregates?: AggregateValuesTuple<TAggregate, TAggregates>;
+  aggregates?: AggregateValuesTuple<TAggregates>;
 };
 
 export type AggregateResultItemForOptions<
   TModel,
   TOptions extends AggregateOptions<TModel>,
-> = AggregateResultItem<
-  TModel,
-  TOptions["groupBy"],
-  AggregateResultOps<TModel, TOptions>["aggregate"],
-  AggregateResultOps<TModel, TOptions>["aggregates"]
->;
+> = AggregateResultItem<TModel, TOptions["groupBy"], TOptions["aggregates"]>;
 
 export type AggregateResult<TItem = Record<string, unknown>> = {
   items: TItem[];
