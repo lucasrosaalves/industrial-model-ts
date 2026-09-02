@@ -1,3 +1,4 @@
+import type { CachePort } from "./cache";
 import type { NodeDefinition, NodeOrEdge } from "./cognite";
 
 export type { NodeOrEdge };
@@ -16,6 +17,8 @@ export type QueryResultMap = Record<string, NodeOrEdge[]>;
 
 export type IndustrialModelClientOptions = {
   validateResults?: boolean;
+  cache?: CachePort;
+  cacheTtlMs?: number;
 };
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};
