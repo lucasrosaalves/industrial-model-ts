@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { createMemoryCacheAdapter } from "../src/cache/adapters/memory-adapter";
 import type { CognitePort, ViewDefinition } from "../src/cognite";
 import { ViewMapper } from "../src/mappers/view-mapper";
 import { createViewMapper, getCogniteCoreView, makeCogniteWithViews } from "./fixtures/index.js";
@@ -199,5 +200,43 @@ describe("ViewMapper", () => {
     const mapper = new ViewMapper(cognite, DATA_MODEL);
     await mapper.getView("ViewC");
     expect(retrieveViews.mock.calls).toHaveLength(2);
+  });
+
+  describe("with a cache adapter", () => {
+    it("reuses views persisted by another ViewMapper instance sharing the same adapter", async () => {
+      const cache = createMemoryCacheAdapter();
+      const cognite = makeCognite([makeView("ViewA")]);
+      const retrieve = cognite.retrieveDataModels as ReturnType<typeof vi.fn>;
+
+      const first = new ViewMapper(cognite, DATA_MODEL, { cache });
+      await first.getViews();
+
+      const second = new ViewMapper(cognite, DATA_MODEL, { cache });
+      const view = await second.getView("ViewA");
+
+      expect(view.externalId).toBe("ViewA");
+      expect(retrieve.mock.calls).toHaveLength(1);
+    });
+
+    it("re-fetches once the cached entry is older than cacheTtlMs", async () => {
+      vi.useFakeTimers();
+      try {
+        const cache = createMemoryCacheAdapter();
+        const cognite = makeCognite([makeView("ViewA")]);
+        const retrieve = cognite.retrieveDataModels as ReturnType<typeof vi.fn>;
+
+        const first = new ViewMapper(cognite, DATA_MODEL, { cache, cacheTtlMs: 1000 });
+        await first.getViews();
+
+        vi.advanceTimersByTime(1001);
+
+        const second = new ViewMapper(cognite, DATA_MODEL, { cache, cacheTtlMs: 1000 });
+        await second.getViews();
+
+        expect(retrieve.mock.calls).toHaveLength(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

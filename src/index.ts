@@ -1,4 +1,11 @@
+export type { CachePort, CacheResolver, CacheResolverOptions } from "./cache";
+export {
+  createCacheResolver,
+  createMemoryCacheAdapter,
+  createWebStorageCacheAdapter,
+} from "./cache";
 export { IndustrialModelClient } from "./client";
+export type { ViewMapperOptions } from "./mappers/view-mapper";
 export type {
   AggregateOptions,
   AggregateResult,
