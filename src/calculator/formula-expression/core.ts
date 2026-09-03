@@ -12,6 +12,12 @@ import type { EvaluationResult, Parameters } from "./types";
  * - comparisons: ``==`` ``!=`` ``<`` ``<=`` ``>`` ``>=``
  * - boolean: ``and`` ``or``
  * - conditional: ``{A} / {B} if {B} != 0 else 0``
+ * - functions: ``rolling_average({A}, N)`` — same-length simple moving
+ *   average. The window ``N`` must be a positive integer constant.
+ *   Incomplete windows at the start of a series average whatever points
+ *   exist so far, so the result stays aligned with the inputs. Put
+ *   value-dependent guards *inside* the series argument: an outer
+ *   ``if`` around the call does not protect other indexes in the window.
  *
  * Structural problems (bad syntax, unknown identifiers, missing parameters,
  * mismatched lengths, non-numeric values) throw a subclass of `FormulaError`.
@@ -29,7 +35,10 @@ import type { EvaluationResult, Parameters } from "./types";
  * Conditional expressions, comparisons and boolean operators are evaluated
  * element-by-element: for each series element only the selected branch is
  * evaluated, so a division-by-zero (or other value-dependent failure) in the
- * branch that is *not* selected for a given element never throws.
+ * branch that is *not* selected for a given element never throws. Window
+ * functions are the exception: once any element selects ``rolling_average``,
+ * its series argument is evaluated at every index, so an outer ``if`` cannot
+ * hide a zero divisor that appears elsewhere in the aligned range.
  */
 export function evaluate(formula: string, parameters: Parameters = {}): EvaluationResult {
   return evaluateCompiled(compileFormula(formula), parameters);

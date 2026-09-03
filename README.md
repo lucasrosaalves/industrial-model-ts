@@ -749,7 +749,7 @@ The returned array preserves the input order. Passing an empty array returns `[]
 
 Use the `Calculator` (from the `industrial-model/calculator` subpath) to compute derived time series — like KPIs and other formula-based metrics — from constants, a single Cognite time series, or several time series combined with a reducer. Each query pairs a `formula` (e.g. `"{power} / {flow} if {flow} != 0 else 0"`) with the parameters its `{alias}` placeholders resolve to; the calculator fetches every time-series parameter's datapoints in a single de-duplicated round trip, aligns them on timestamp (`intersect` by default, or `strict`), and evaluates the formula element-by-element. The underlying formula engine (`evaluate`) is also available on its own, for evaluating formulas over in-memory numeric series with no Cognite dependency.
 
-See the [Calculator documentation](./src/calculator/README.md) for a quick start, constants, multi-series reducers, timestamp alignment, aggregated parameters, batching multiple queries, a full OEE example, supported operators, and error handling.
+See the [Calculator documentation](./src/calculator/README.md) for a quick start, constants, multi-series reducers, timestamp alignment, aggregated parameters, batching multiple queries, a full OEE example, `rolling_average`, supported operators, and error handling.
 
 ## Aggregation
 
