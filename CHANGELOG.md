@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.18.0
+
+### Minor Changes
+
+- 069d45a: Add `rolling_average(series, N)` to the calculator formula engine, matching the Python package's count-based moving average with a same-length partial prefix.
+
 ## 0.17.0
 
 ### Minor Changes
