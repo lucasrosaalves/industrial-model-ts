@@ -120,7 +120,18 @@ describe("rolling_average", () => {
     );
   });
 
-  it("raises when an outer guard wraps unguarded division inside the window", () => {
+  it("does not evaluate indexes outside a selected window", () => {
+    expectClose(
+      evaluate("rolling_average({A} / {B}, 2) if {C} > 0 else 0", {
+        A: [10, 20],
+        B: [5, 0],
+        C: [1, 0],
+      }),
+      [2, 0],
+    );
+  });
+
+  it("raises when a selected window includes an unguarded zero divisor", () => {
     expect(() =>
       evaluate("rolling_average({A} / {B}, 2) if {B} != 0 else 0", {
         A: [10, 20, 30],

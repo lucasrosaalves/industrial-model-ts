@@ -1,5 +1,4 @@
 import type { CallNode, CompareOp, ExprNode } from "./ast";
-import { treeHasConditional } from "./ast";
 import { ALLOWED_FUNCTIONS, type FunctionSpec } from "./functions";
 import { BINARY_OPS, UNARY_OPS } from "./ops";
 
@@ -14,8 +13,11 @@ export type Environment = Record<string, readonly number[]>;
  */
 type Value = number | readonly number[];
 
-/** Memoized ``rolling_average`` (and future window) results for one evaluation. */
-type CallCache = WeakMap<CallNode, Value>;
+/**
+ * Per-call memo of series-argument values at indexes a selected window has
+ * already needed. Indexes that are never in a selected window stay unevaluated.
+ */
+type CallArgCache = WeakMap<CallNode, Map<number, number>>;
 
 const COMPARE_OPS: Record<CompareOp, (left: number, right: number) => boolean> = {
   eq: (left, right) => left === right,
@@ -40,10 +42,10 @@ export function evaluateTree(
   if (hasConditional) {
     // ``if``/``else`` branches (and their guards) must only run for the
     // elements that select them, so evaluate index-by-index.
-    const cache: CallCache = new WeakMap();
+    const cache: CallArgCache = new WeakMap();
     const result: number[] = new Array(length);
     for (let index = 0; index < length; index += 1) {
-      result[index] = evaluateNodeAt(tree, environment, index, length, cache);
+      result[index] = evaluateNodeAt(tree, environment, index, cache);
     }
     return result;
   }
@@ -111,8 +113,7 @@ function evaluateNodeAt(
   node: ExprNode,
   environment: Environment,
   index: number,
-  length: number,
-  cache: CallCache,
+  cache: CallArgCache,
 ): number {
   switch (node.kind) {
     case "name": {
@@ -122,22 +123,16 @@ function evaluateNodeAt(
     case "constant":
       return node.value;
     case "binop": {
-      const left = evaluateNodeAt(node.left, environment, index, length, cache);
-      const right = evaluateNodeAt(node.right, environment, index, length, cache);
+      const left = evaluateNodeAt(node.left, environment, index, cache);
+      const right = evaluateNodeAt(node.right, environment, index, cache);
       return BINARY_OPS[node.op](left, right);
     }
     case "unaryop":
-      return UNARY_OPS[node.op](evaluateNodeAt(node.operand, environment, index, length, cache));
+      return UNARY_OPS[node.op](evaluateNodeAt(node.operand, environment, index, cache));
     case "compare": {
-      let left = evaluateNodeAt(node.left, environment, index, length, cache);
+      let left = evaluateNodeAt(node.left, environment, index, cache);
       for (let i = 0; i < node.ops.length; i += 1) {
-        const right = evaluateNodeAt(
-          node.comparators[i] as ExprNode,
-          environment,
-          index,
-          length,
-          cache,
-        );
+        const right = evaluateNodeAt(node.comparators[i] as ExprNode, environment, index, cache);
         if (!COMPARE_OPS[node.ops[i] as CompareOp](left, right)) {
           return 0;
         }
@@ -148,26 +143,26 @@ function evaluateNodeAt(
     case "boolop": {
       if (node.op === "and") {
         for (const value of node.values) {
-          if (!isTruthy(evaluateNodeAt(value, environment, index, length, cache))) {
+          if (!isTruthy(evaluateNodeAt(value, environment, index, cache))) {
             return 0;
           }
         }
         return 1;
       }
       for (const value of node.values) {
-        if (isTruthy(evaluateNodeAt(value, environment, index, length, cache))) {
+        if (isTruthy(evaluateNodeAt(value, environment, index, cache))) {
           return 1;
         }
       }
       return 0;
     }
     case "ifexp": {
-      const test = evaluateNodeAt(node.test, environment, index, length, cache);
+      const test = evaluateNodeAt(node.test, environment, index, cache);
       const branch = isTruthy(test) ? node.body : node.orelse;
-      return evaluateNodeAt(branch, environment, index, length, cache);
+      return evaluateNodeAt(branch, environment, index, cache);
     }
     case "call":
-      return evaluateCallAt(node, environment, index, length, cache);
+      return evaluateCallAt(node, environment, index, cache);
     default:
       throw new TypeError("unsupported formula element");
   }
@@ -184,61 +179,45 @@ function evaluateCall(node: CallNode, environment: Environment): Value {
 }
 
 /**
- * Window functions need neighboring values, so a per-index lookback would be
- * ``O(n × window)`` and would re-evaluate inner conditionals on every visit.
- *
- * Instead, the first time a given call runs we materialize the whole series
- * (vectorized when the argument has no ``if``/compare, element-wise when it
- * does) and cache it. Later indexes are ``O(1)`` lookups.
- *
- * Once any element selects the call, the series argument is evaluated at
- * every index — an outer ``if`` does not protect unguarded arithmetic inside
- * the window. A call that is never selected still does not run.
+ * If index ``i`` selects the call, evaluate the series argument on
+ * ``[max(0, i-window+1), i]`` only — including neighbors that would not
+ * have selected the call themselves. Short-circuit still applies per
+ * neighbor. Overlapping windows reuse already-computed argument values;
+ * indexes that are never in a selected window are not evaluated.
  */
 function evaluateCallAt(
   node: CallNode,
   environment: Environment,
   index: number,
-  length: number,
-  cache: CallCache,
+  cache: CallArgCache,
 ): number {
-  let cached = cache.get(node);
-  if (cached === undefined) {
-    cached = materializeCall(node, environment, length, cache);
-    cache.set(node, cached);
-  }
-  return Array.isArray(cached) ? (cached[index] as number) : (cached as number);
-}
-
-function materializeCall(
-  node: CallNode,
-  environment: Environment,
-  length: number,
-  cache: CallCache,
-): Value {
   const spec = callSpec(node);
   const window = callWindow(node, environment);
-  const arg = node.args[0] as ExprNode;
-  const series = treeHasConditional(arg)
-    ? materializeSeriesAt(arg, environment, length, cache)
-    : evaluateNode(arg, environment);
-  if (!Array.isArray(series)) {
-    return series;
+  const start = Math.max(0, index - window + 1);
+  const values: number[] = [];
+  for (let neighbor = start; neighbor <= index; neighbor += 1) {
+    values.push(evaluateCallArgAt(node, environment, neighbor, cache));
   }
-  return spec.apply(series, window);
+  return spec.apply(values, window)[values.length - 1] as number;
 }
 
-function materializeSeriesAt(
-  node: ExprNode,
+function evaluateCallArgAt(
+  node: CallNode,
   environment: Environment,
-  length: number,
-  cache: CallCache,
-): number[] {
-  const values: number[] = new Array(length);
-  for (let index = 0; index < length; index += 1) {
-    values[index] = evaluateNodeAt(node, environment, index, length, cache);
+  index: number,
+  cache: CallArgCache,
+): number {
+  let byIndex = cache.get(node);
+  if (byIndex === undefined) {
+    byIndex = new Map();
+    cache.set(node, byIndex);
   }
-  return values;
+  if (byIndex.has(index)) {
+    return byIndex.get(index) as number;
+  }
+  const value = evaluateNodeAt(node.args[0] as ExprNode, environment, index, cache);
+  byIndex.set(index, value);
+  return value;
 }
 
 function callSpec(node: CallNode): FunctionSpec & { readonly windowArg: number } {
