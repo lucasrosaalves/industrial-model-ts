@@ -472,6 +472,7 @@ describe("Cognite Core module", () => {
       instanceType: "edge" as const,
       space: "annotation-space",
       externalId: "object-1-image-360-annotation-image-1",
+      type: { space: "cdf_cdm", externalId: "image-360-annotation" },
       startNode: { space: "object-space", externalId: "object-1" },
       endNode: { space: "image-space", externalId: "image-1" },
       properties: {
@@ -493,6 +494,7 @@ describe("Cognite Core module", () => {
 
     const { items } = await core.query("Cognite360ImageAnnotation")({
       select: { confidence: true, polygon: true },
+      filters: { endNode: { eq: { space: "image-space", externalId: "image-1" } } },
     });
 
     expect(client.instances.query).toHaveBeenCalledWith(
@@ -511,6 +513,12 @@ describe("Cognite Core module", () => {
                         version: "v1",
                       },
                     ],
+                  },
+                  {
+                    equals: {
+                      property: ["edge", "endNode"],
+                      value: { space: "image-space", externalId: "image-1" },
+                    },
                   },
                 ],
               },
@@ -539,6 +547,7 @@ describe("Cognite Core module", () => {
         instanceType: "edge",
         space: "annotation-space",
         externalId: "object-1-image-360-annotation-image-1",
+        type: { space: "cdf_cdm", externalId: "image-360-annotation" },
         startNode: { space: "object-space", externalId: "object-1" },
         endNode: { space: "image-space", externalId: "image-1" },
         confidence: 0.92,

@@ -51,8 +51,8 @@ export type FilterDefinition =
   | { and: FilterDefinition[] }
   | { or: FilterDefinition[] }
   | { not: FilterDefinition }
-  | { equals: { property: string[]; value: string | number | boolean } }
-  | { in: { property: string[]; values: (string | number | boolean)[] } }
+  | { equals: { property: string[]; value: string | number | boolean | NodeId } }
+  | { in: { property: string[]; values: (string | number | boolean | NodeId)[] } }
   | {
       range: {
         property: string[];

@@ -102,6 +102,12 @@ export type QuerySelect<TModel, TDepth extends QueryDepth = 3> = { _all?: true }
   [K in keyof ModelProps<TModel> | RelationKeys<TModel>]?: QuerySelectValue<TModel, K, TDepth>;
 };
 
+type ModelInstanceType<TModel> = TModel extends {
+  readonly [MODEL_INSTANCE_TYPE]?: "edge";
+}
+  ? "edge"
+  : "node";
+
 type SortInput<TModel> = {
   [K in keyof ModelProps<TModel> as NonNull<ModelProps<TModel>[K]> extends
     | string
@@ -111,7 +117,13 @@ type SortInput<TModel> = {
     | NodeId
     ? K
     : never]?: SortDirection;
-};
+} & (ModelInstanceType<TModel> extends "edge"
+  ? {
+      startNode?: SortDirection;
+      endNode?: SortDirection;
+      type?: SortDirection;
+    }
+  : {});
 
 export type QueryOptions<
   TModel,
@@ -124,12 +136,6 @@ export type QueryOptions<
   limit?: number;
   cursor?: string | null;
 };
-
-type ModelInstanceType<TModel> = TModel extends {
-  readonly [MODEL_INSTANCE_TYPE]?: "edge";
-}
-  ? "edge"
-  : "node";
 
 type NodeResultMetadata = Pick<
   NodeDefinition,
@@ -144,6 +150,7 @@ type EdgeResultMetadata = Pick<
   | "createdTime"
   | "deletedTime"
   | "lastUpdatedTime"
+  | "type"
   | "startNode"
   | "endNode"
 >;
@@ -639,4 +646,10 @@ export type WhereInput<TModel> = {
   NOT?: WhereInput<TModel> | WhereInput<TModel>[];
 } & {
   [K in keyof ModelProps<TModel> | RelationKeys<TModel>]?: QueryFilterValue<TModel, K>;
-};
+} & (ModelInstanceType<TModel> extends "edge"
+    ? {
+        startNode?: NodeIdFilters;
+        endNode?: NodeIdFilters;
+        type?: NodeIdFilters;
+      }
+    : {});

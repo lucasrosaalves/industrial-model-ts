@@ -163,6 +163,38 @@ describe("QueryMapper", () => {
     });
   });
 
+  it("maps edge endpoints and type as intrinsic edge filters and sorts", async () => {
+    const startNode = { space: "object-space", externalId: "object-1" };
+    const endNode = { space: "image-space", externalId: "image-1" };
+    const edgeType = { space: "cdf_cdm", externalId: "image-360-annotation" };
+
+    const query = await mapper.map<IndustrialModel<{ value?: never }, object, "edge">>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      filters: {
+        startNode: { eq: startNode },
+        endNode: { in: [endNode] },
+        type: { eq: edgeType },
+      },
+      sort: { endNode: "ascending", type: "descending" },
+    });
+
+    expect(query.with.Cognite360ImageAnnotation).toMatchObject({
+      edges: {
+        filter: {
+          and: expect.arrayContaining([
+            { equals: { property: ["edge", "startNode"], value: startNode } },
+            { in: { property: ["edge", "endNode"], values: [endNode] } },
+            { equals: { property: ["edge", "type"], value: edgeType } },
+          ]),
+        },
+      },
+      sort: [
+        { property: ["edge", "endNode"], direction: "ascending", nullsFirst: false },
+        { property: ["edge", "type"], direction: "descending", nullsFirst: true },
+      ],
+    });
+  });
+
   it("maps text search filters on edge views with instanceType edge", async () => {
     const cognite = makeCogniteMock();
     cognite.searchInstances = vi.fn().mockResolvedValue({
@@ -465,6 +497,31 @@ describe("QueryMapper", () => {
           filters: { namme: { eq: "Pump" } } as never,
         }),
       ).rejects.toThrow(/filters: Unrecognized key: "namme"/);
+    });
+
+    it("rejects edge intrinsic filters and sorts on node views", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          filters: { startNode: { eq: { space: "asset-space", externalId: "asset-1" } } } as never,
+        }),
+      ).rejects.toThrow(/filters: Unrecognized key: "startNode"/);
+
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          sort: { endNode: "ascending" } as never,
+        }),
+      ).rejects.toThrow(/sort: Unrecognized key: "endNode"/);
+    });
+
+    it("rejects invalid edge intrinsic filter operators", async () => {
+      await expect(
+        mapper.map({
+          viewExternalId: "Cognite360ImageAnnotation",
+          filters: { startNode: { prefix: "object" } } as never,
+        }),
+      ).rejects.toThrow(/filters\.startNode: Unrecognized key: "prefix"/);
     });
 
     it("rejects filter operators that do not match the view property type", async () => {
