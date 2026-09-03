@@ -163,6 +163,76 @@ describe("QueryMapper", () => {
     });
   });
 
+  it("maps text search filters on edge views with instanceType edge", async () => {
+    const cognite = makeCogniteMock();
+    cognite.searchInstances = vi.fn().mockResolvedValue({
+      items: [{ instanceType: "edge", space: "annotation-space", externalId: "annotation-1" }],
+    });
+    const searchMapper = new QueryMapper(createViewMapper(), cognite);
+
+    const query = await searchMapper.map<{ name?: string }>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { name: true },
+      filters: { name: { search: { query: "weld", operator: "AND" } } },
+    });
+
+    expect(cognite.searchInstances).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "weld",
+        operator: "AND",
+        properties: ["name"],
+        instanceType: "edge",
+      }),
+    );
+    const rootWith = query.with.Cognite360ImageAnnotation as {
+      edges: { filter: { and: unknown[] } };
+    };
+    expect(rootWith.edges.filter.and).toContainEqual({
+      instanceReferences: [{ space: "annotation-space", externalId: "annotation-1" }],
+    });
+  });
+
+  it("selects all scalar properties with _all on root edge views", async () => {
+    const query = await mapper.map({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { _all: true },
+      limit: 5,
+    });
+
+    const rootSelect = query.select.Cognite360ImageAnnotation as {
+      sources: { properties: string[] }[];
+    };
+    const properties = rootSelect.sources[0]?.properties ?? [];
+
+    expect(properties).toContain("confidence");
+    expect(properties).toContain("polygon");
+    expect(properties).toContain("formatVersion");
+    expect(properties).toContain("name");
+    expect(properties).toContain("source");
+    expect(query.with.Cognite360ImageAnnotation).toMatchObject({ limit: 5 });
+    expect(query.with["Cognite360ImageAnnotation|source"]).toBeUndefined();
+  });
+
+  it("uses Cognite's max root limit when auto-paginating edge views", async () => {
+    const query = await mapper.map<{ confidence?: number }>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { confidence: true },
+      limit: -1,
+    });
+
+    expect(query.with.Cognite360ImageAnnotation).toMatchObject({ limit: 10_000 });
+  });
+
+  it("passes cursor on the root edge table expression", async () => {
+    const query = await mapper.map<{ confidence?: number }>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { confidence: true },
+      cursor: "edge-cursor-1",
+    });
+
+    expect(query.cursors).toEqual({ Cognite360ImageAnnotation: "edge-cursor-1" });
+  });
+
   it("uses Cognite's max root limit when auto-paginating all pages", async () => {
     const query = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",

@@ -11,6 +11,7 @@ export function renderClient(views: ViewDefinition[], config: GeneratorConfig): 
   const imports = [
     `  ${config.clientName}AggregateExecutor,`,
     `  ${config.clientName}Model,`,
+    `  ${config.clientName}NodeViewExternalId,`,
     `  ${config.clientName}QueryExecutor,`,
     `  ${config.clientName}UpsertExecutor,`,
     `  ${config.clientName}ViewExternalId,`,
@@ -19,6 +20,11 @@ export function renderClient(views: ViewDefinition[], config: GeneratorConfig): 
   const viewShortcuts = views
     .map((view) => {
       const prop = getClientPropertyName(view);
+      if (view.usedFor === "edge") {
+        return `    ${prop}: {
+      query: model.query("${view.viewExternalId}"),
+    },`;
+      }
       return `    ${prop}: {
       query: model.query("${view.viewExternalId}"),
       aggregate: model.aggregate("${view.viewExternalId}"),
@@ -71,7 +77,7 @@ export class ${config.clientName}Client {
     return execute as ${config.clientName}QueryExecutor<TView>;
   }
 
-  aggregate<TView extends ${config.clientName}ViewExternalId>(
+  aggregate<TView extends ${config.clientName}NodeViewExternalId>(
     viewExternalId: TView,
   ): ${config.clientName}AggregateExecutor<TView> {
     const aggregate = this.model.aggregate<${config.clientName}Model<TView>>();
@@ -83,7 +89,7 @@ export class ${config.clientName}Client {
     return execute as unknown as ${config.clientName}AggregateExecutor<TView>;
   }
 
-  upsert<TView extends ${config.clientName}ViewExternalId>(
+  upsert<TView extends ${config.clientName}NodeViewExternalId>(
     viewExternalId: TView,
   ): ${config.clientName}UpsertExecutor<TView> {
     const upsert = this.model.upsert<${config.clientName}Model<TView>>();

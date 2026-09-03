@@ -47,6 +47,12 @@ export class AggregateValidator {
   ): Promise<void> {
     const errors: string[] = [];
 
+    if (rootView.usedFor === "edge") {
+      throw new Error(
+        `Invalid aggregate options:\n- viewExternalId: edge views are query-only; aggregate is not supported for "${rootView.externalId}"`,
+      );
+    }
+
     errors.push(...this.validateOptionsShape(options, rootView));
 
     const selectedGroupBy = options.groupBy ? getSelectedGroupByKeys(options.groupBy) : [];

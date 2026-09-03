@@ -494,8 +494,17 @@ const annotation = items[0];
 // annotation.startNode, annotation.endNode, annotation.confidence, annotation.polygon
 ```
 
-Root edge-view queries support scalar selections, filters, sorting, and pagination. Traversing
-relations from a root edge view and writing edge-view properties are not supported.
+Root edge-view queries support scalar selections, filters, sorting, search, and pagination.
+Traversing relations from a root edge view is not supported.
+
+Edge views are **query-only**:
+
+- Generated per-view shortcuts expose only `query` for edge views (`aggregate`, `upsert`, and
+  `delete` are omitted).
+- `CogniteCoreClient` / generated client `aggregate` and `upsert` accept node view ids only
+  (`*NodeViewExternalId`). Calling them with an edge view id is a TypeScript error and is rejected
+  at runtime.
+- Top-level `delete(ids)` remains view-independent and always deletes nodes.
 
 ## Pagination
 

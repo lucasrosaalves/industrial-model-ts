@@ -27,6 +27,8 @@ const nodeMetadataSchema = {
   _edges: z.record(z.string(), z.unknown()).optional(),
 };
 
+const edgeEndpointSchema = z.object({ space: z.string(), externalId: z.string() });
+
 const edgeMetadataSchema = {
   instanceType: z.literal("edge").optional(),
   space: z.string(),
@@ -35,8 +37,9 @@ const edgeMetadataSchema = {
   createdTime: z.number().optional(),
   deletedTime: z.number().optional(),
   lastUpdatedTime: z.number().optional(),
-  startNode: z.object({ space: z.string(), externalId: z.string() }),
-  endNode: z.object({ space: z.string(), externalId: z.string() }),
+  type: edgeEndpointSchema.optional(),
+  startNode: edgeEndpointSchema,
+  endNode: edgeEndpointSchema,
 };
 
 function isListRelation(property: ViewDefinitionProperty): boolean {

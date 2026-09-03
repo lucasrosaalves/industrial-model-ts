@@ -180,6 +180,7 @@ export interface EdgeDefinition {
   version?: number;
   space: string;
   externalId: string;
+  type?: { space: string; externalId: string };
   startNode: { space: string; externalId: string };
   endNode: { space: string; externalId: string };
   properties?: Record<string, Record<string, Record<string, unknown>>>;

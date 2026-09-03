@@ -234,6 +234,10 @@ describe("renderTypes", () => {
     const output = renderTypes(mockViews, mockConfig);
 
     expect(output).toContain("export type MyDataModelViewExternalId =");
+    expect(output).toContain("export type MyDataModelEdgeViewExternalId = never;");
+    expect(output).toContain(
+      "export type MyDataModelNodeViewExternalId = Exclude<\n  MyDataModelViewExternalId,\n  MyDataModelEdgeViewExternalId\n>;",
+    );
     expect(output).toContain('| "Equipment"');
     expect(output).toContain('| "User"');
     expect(output).toContain("  Equipment: Equipment;");
@@ -242,8 +246,35 @@ describe("renderTypes", () => {
       "export type MyDataModelModel<TView extends MyDataModelViewExternalId>",
     );
     expect(output).toContain("export type MyDataModelQueryExecutor");
-    expect(output).toContain("export type MyDataModelAggregateExecutor");
-    expect(output).toContain("export type MyDataModelUpsertExecutor");
+    expect(output).toContain(
+      "export type MyDataModelAggregateExecutor<TView extends MyDataModelNodeViewExternalId>",
+    );
+    expect(output).toContain(
+      "export type MyDataModelUpsertExecutor<TView extends MyDataModelNodeViewExternalId>",
+    );
+  });
+
+  it("derives node view ids by excluding edge views", () => {
+    const output = renderTypes(
+      [
+        ...mockViews,
+        {
+          viewName: "ImageAnnotation",
+          viewExternalId: "ImageAnnotation",
+          viewSpace: "annotation_space",
+          viewVersion: "1",
+          usedFor: "edge",
+          fields: [],
+        },
+      ],
+      mockConfig,
+    );
+
+    expect(output).toContain('| "ImageAnnotation"');
+    expect(output).toContain('export type MyDataModelEdgeViewExternalId =\n  | "ImageAnnotation";');
+    expect(output).toContain(
+      "export type MyDataModelNodeViewExternalId = Exclude<\n  MyDataModelViewExternalId,\n  MyDataModelEdgeViewExternalId\n>;",
+    );
   });
 
   it("excludes reverse relations from props", () => {
@@ -307,8 +338,8 @@ describe("renderClient", () => {
     expect(output).toContain('version: "1"');
     expect(output).toContain("export class MyDataModelClient");
     expect(output).toContain("query<TView extends MyDataModelViewExternalId>");
-    expect(output).toContain("aggregate<TView extends MyDataModelViewExternalId>");
-    expect(output).toContain("upsert<TView extends MyDataModelViewExternalId>");
+    expect(output).toContain("aggregate<TView extends MyDataModelNodeViewExternalId>");
+    expect(output).toContain("upsert<TView extends MyDataModelNodeViewExternalId>");
     expect(output).toContain("delete<TItem extends NodeId>");
   });
 
@@ -317,6 +348,7 @@ describe("renderClient", () => {
 
     expect(output).toContain('from "industrial-model";');
     expect(output).toContain('} from "./types";');
+    expect(output).toContain("MyDataModelNodeViewExternalId,");
     expect(output).not.toContain('from "../');
     expect(output).not.toContain('from "./models"');
   });
@@ -339,6 +371,29 @@ describe("renderClient", () => {
     expect(output).toContain(
       "delete: <TItem extends NodeId>(items: TItem[]) => model.delete(items)",
     );
+  });
+
+  it("generates query-only shortcuts for edge-backed views", () => {
+    const output = renderClient(
+      [
+        ...mockViews,
+        {
+          viewName: "ImageAnnotation",
+          viewExternalId: "ImageAnnotation",
+          viewSpace: "annotation_space",
+          viewVersion: "1",
+          usedFor: "edge",
+          fields: [],
+        },
+      ],
+      mockConfig,
+    );
+
+    expect(output).toContain("imageAnnotation: {");
+    expect(output).toContain('query: model.query("ImageAnnotation")');
+    expect(output).not.toContain('aggregate: model.aggregate("ImageAnnotation")');
+    expect(output).not.toContain('upsert: model.upsert("ImageAnnotation")');
+    expect(output).toContain('aggregate: model.aggregate("Equipment")');
   });
 });
 
