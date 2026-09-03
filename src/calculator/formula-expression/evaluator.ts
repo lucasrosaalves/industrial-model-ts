@@ -1,5 +1,6 @@
-import type { BinaryOp, CompareOp, ExprNode, UnaryOp } from "./ast";
-import { OverflowError, ZeroDivisionError } from "./exceptions";
+import type { CallNode, CompareOp, ExprNode } from "./ast";
+import { ALLOWED_FUNCTIONS, type FunctionSpec } from "./functions";
+import { BINARY_OPS, UNARY_OPS } from "./ops";
 
 /** Environment mapping safe identifiers to their aligned numeric series. */
 export type Environment = Record<string, readonly number[]>;
@@ -12,24 +13,11 @@ export type Environment = Record<string, readonly number[]>;
  */
 type Value = number | readonly number[];
 
-const UNARY_OPS: Record<UnaryOp, (value: number) => number> = {
-  pos: (value) => value,
-  neg: (value) => -value,
-};
-
-const BINARY_OPS: Record<BinaryOp, (left: number, right: number) => number> = {
-  add: (left, right) => left + right,
-  sub: (left, right) => left - right,
-  mul: (left, right) => left * right,
-  div: (left, right) => {
-    if (right === 0) {
-      throw new ZeroDivisionError("float division by zero");
-    }
-    return left / right;
-  },
-  mod: signedMod,
-  pow: safePow,
-};
+/**
+ * Per-call memo of series-argument values at indexes a selected window has
+ * already needed. Indexes that are never in a selected window stay unevaluated.
+ */
+type CallArgCache = WeakMap<CallNode, Map<number, number>>;
 
 const COMPARE_OPS: Record<CompareOp, (left: number, right: number) => boolean> = {
   eq: (left, right) => left === right,
@@ -39,29 +27,6 @@ const COMPARE_OPS: Record<CompareOp, (left: number, right: number) => boolean> =
   gt: (left, right) => left > right,
   ge: (left, right) => left >= right,
 };
-
-/** Remainder with the sign of the divisor, unlike JavaScript's ``%``. */
-function signedMod(left: number, right: number): number {
-  if (right === 0) {
-    throw new ZeroDivisionError("float modulo");
-  }
-  return left - Math.floor(left / right) * right;
-}
-
-/**
- * Exponentiate in float space. Raising ``0`` to a negative power and
- * overflowing results are arithmetic errors rather than silent infinities.
- */
-function safePow(base: number, exponent: number): number {
-  if (base === 0 && exponent < 0) {
-    throw new ZeroDivisionError("0.0 cannot be raised to a negative power");
-  }
-  const result = base ** exponent;
-  if (!Number.isFinite(result) && Number.isFinite(base) && Number.isFinite(exponent)) {
-    throw new OverflowError("(34, 'Numerical result out of range')");
-  }
-  return result;
-}
 
 /** Formula truthiness for floats: only exactly ``0`` is falsy (``NaN`` is truthy). */
 function isTruthy(value: number): boolean {
@@ -77,9 +42,10 @@ export function evaluateTree(
   if (hasConditional) {
     // ``if``/``else`` branches (and their guards) must only run for the
     // elements that select them, so evaluate index-by-index.
+    const cache: CallArgCache = new WeakMap();
     const result: number[] = new Array(length);
     for (let index = 0; index < length; index += 1) {
-      result[index] = evaluateNodeAt(tree, environment, index);
+      result[index] = evaluateNodeAt(tree, environment, index, cache);
     }
     return result;
   }
@@ -112,6 +78,8 @@ function evaluateNode(node: ExprNode, environment: Environment): Value {
       const op = UNARY_OPS[node.op];
       return Array.isArray(operand) ? operand.map(op) : op(operand as number);
     }
+    case "call":
+      return evaluateCall(node, environment);
     default:
       // Conditional nodes never reach the vectorized path.
       throw new TypeError(`unsupported formula element: ${node.kind}`);
@@ -141,7 +109,12 @@ function applyBinary(
   return op(scalarLeft, right as number);
 }
 
-function evaluateNodeAt(node: ExprNode, environment: Environment, index: number): number {
+function evaluateNodeAt(
+  node: ExprNode,
+  environment: Environment,
+  index: number,
+  cache: CallArgCache,
+): number {
   switch (node.kind) {
     case "name": {
       const series = environment[node.id] as readonly number[];
@@ -150,16 +123,16 @@ function evaluateNodeAt(node: ExprNode, environment: Environment, index: number)
     case "constant":
       return node.value;
     case "binop": {
-      const left = evaluateNodeAt(node.left, environment, index);
-      const right = evaluateNodeAt(node.right, environment, index);
+      const left = evaluateNodeAt(node.left, environment, index, cache);
+      const right = evaluateNodeAt(node.right, environment, index, cache);
       return BINARY_OPS[node.op](left, right);
     }
     case "unaryop":
-      return UNARY_OPS[node.op](evaluateNodeAt(node.operand, environment, index));
+      return UNARY_OPS[node.op](evaluateNodeAt(node.operand, environment, index, cache));
     case "compare": {
-      let left = evaluateNodeAt(node.left, environment, index);
+      let left = evaluateNodeAt(node.left, environment, index, cache);
       for (let i = 0; i < node.ops.length; i += 1) {
-        const right = evaluateNodeAt(node.comparators[i] as ExprNode, environment, index);
+        const right = evaluateNodeAt(node.comparators[i] as ExprNode, environment, index, cache);
         if (!COMPARE_OPS[node.ops[i] as CompareOp](left, right)) {
           return 0;
         }
@@ -170,25 +143,93 @@ function evaluateNodeAt(node: ExprNode, environment: Environment, index: number)
     case "boolop": {
       if (node.op === "and") {
         for (const value of node.values) {
-          if (!isTruthy(evaluateNodeAt(value, environment, index))) {
+          if (!isTruthy(evaluateNodeAt(value, environment, index, cache))) {
             return 0;
           }
         }
         return 1;
       }
       for (const value of node.values) {
-        if (isTruthy(evaluateNodeAt(value, environment, index))) {
+        if (isTruthy(evaluateNodeAt(value, environment, index, cache))) {
           return 1;
         }
       }
       return 0;
     }
     case "ifexp": {
-      const test = evaluateNodeAt(node.test, environment, index);
+      const test = evaluateNodeAt(node.test, environment, index, cache);
       const branch = isTruthy(test) ? node.body : node.orelse;
-      return evaluateNodeAt(branch, environment, index);
+      return evaluateNodeAt(branch, environment, index, cache);
     }
+    case "call":
+      return evaluateCallAt(node, environment, index, cache);
     default:
       throw new TypeError("unsupported formula element");
   }
+}
+
+function evaluateCall(node: CallNode, environment: Environment): Value {
+  const spec = callSpec(node);
+  const window = callWindow(node, environment);
+  const series = evaluateNode(node.args[0] as ExprNode, environment);
+  if (!Array.isArray(series)) {
+    return series;
+  }
+  return spec.apply(series, window);
+}
+
+/**
+ * If index ``i`` selects the call, evaluate the series argument on
+ * ``[max(0, i-window+1), i]`` only — including neighbors that would not
+ * have selected the call themselves. Short-circuit still applies per
+ * neighbor. Overlapping windows reuse already-computed argument values;
+ * indexes that are never in a selected window are not evaluated.
+ */
+function evaluateCallAt(
+  node: CallNode,
+  environment: Environment,
+  index: number,
+  cache: CallArgCache,
+): number {
+  const spec = callSpec(node);
+  const window = callWindow(node, environment);
+  const start = Math.max(0, index - window + 1);
+  const values: number[] = [];
+  for (let neighbor = start; neighbor <= index; neighbor += 1) {
+    values.push(evaluateCallArgAt(node, environment, neighbor, cache));
+  }
+  return spec.apply(values, window)[values.length - 1] as number;
+}
+
+function evaluateCallArgAt(
+  node: CallNode,
+  environment: Environment,
+  index: number,
+  cache: CallArgCache,
+): number {
+  let byIndex = cache.get(node);
+  if (byIndex === undefined) {
+    byIndex = new Map();
+    cache.set(node, byIndex);
+  }
+  if (byIndex.has(index)) {
+    return byIndex.get(index) as number;
+  }
+  const value = evaluateNodeAt(node.args[0] as ExprNode, environment, index, cache);
+  byIndex.set(index, value);
+  return value;
+}
+
+function callSpec(node: CallNode): FunctionSpec & { readonly windowArg: number } {
+  const spec = ALLOWED_FUNCTIONS[node.name];
+  if (spec === undefined || spec.windowArg === null) {
+    throw new TypeError("unsupported formula element");
+  }
+  return spec as FunctionSpec & { readonly windowArg: number };
+}
+
+function callWindow(node: CallNode, environment: Environment): number {
+  const spec = callSpec(node);
+  const windowValue = evaluateNode(node.args[spec.windowArg] as ExprNode, environment);
+  return windowValue as number;
 }

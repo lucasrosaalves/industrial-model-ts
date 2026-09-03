@@ -25,6 +25,7 @@ const END = new Date("2024-01-02T00:00:00.000Z");
 const T0 = new Date("2024-01-01T00:00:00.000Z");
 const T1 = new Date("2024-01-01T01:00:00.000Z");
 const T2 = new Date("2024-01-01T02:00:00.000Z");
+const T3 = new Date("2024-01-01T03:00:00.000Z");
 
 function makeSeries(points: Array<[Date, number | string]>) {
   return {
@@ -117,6 +118,57 @@ describe("Calculator.calculate: happy paths", () => {
     const result = await calculator.calculate(query("{A} * 2", [param(TS_A, "A")]), START, END);
 
     expect(result.datapoints.map((point) => point.value)).toEqual([2, 4, 6]);
+  });
+
+  it("rolling average keeps input alignment", async () => {
+    const { calculator } = makeCalculator([
+      makeSeries([
+        [T0, 10],
+        [T1, 20],
+        [T2, 30],
+        [T3, 40],
+      ]),
+    ]);
+
+    const result = await calculator.calculate(
+      query("rolling_average({A}, 3)", [param(TS_A, "A")]),
+      START,
+      END,
+    );
+
+    expect(result.datapoints.map((point) => point.value)).toEqual([10, 15, 20, 30]);
+    expect(inputValues(result)).toEqual({ A: [10, 20, 30, 40] });
+    expectInputsShareResultTimestamps(result);
+  });
+
+  it("rolling average minus a second series stays aligned", async () => {
+    const { calculator } = makeCalculator([
+      makeSeries([
+        [T0, 10],
+        [T1, 20],
+        [T2, 30],
+        [T3, 40],
+      ]),
+      makeSeries([
+        [T0, 1],
+        [T1, 2],
+        [T2, 3],
+        [T3, 4],
+      ]),
+    ]);
+
+    const result = await calculator.calculate(
+      query("rolling_average({A}, 3) - {B}", [param(TS_A, "A"), param(TS_B, "B")]),
+      START,
+      END,
+    );
+
+    expect(result.datapoints.map((point) => point.value)).toEqual([9, 13, 17, 26]);
+    expect(inputValues(result)).toEqual({
+      A: [10, 20, 30, 40],
+      B: [1, 2, 3, 4],
+    });
+    expectInputsShareResultTimestamps(result);
   });
 
   it("passes window to client", async () => {

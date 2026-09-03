@@ -300,6 +300,36 @@ describe("compileFormula", () => {
     expect(compileFormula("{_A} + {B2}").variables).toEqual(["_A", "B2"]);
     expect(compileFormula("{A1} + {B2}").variables).toEqual(["A1", "B2"]);
   });
+
+  it("parses rolling_average as a call", () => {
+    const compiled = compileFormula("rolling_average({A}, 3)");
+    expect(compiled.tree.kind).toBe("call");
+    expect(compiled.hasConditional).toBe(false);
+    expect(compiled.variables).toEqual(["A"]);
+  });
+
+  it("folds rolling_average window expression", () => {
+    const compiled = compileFormula("rolling_average({A}, 2 + 2)");
+    expect(compiled.tree.kind).toBe("call");
+    if (compiled.tree.kind !== "call") {
+      return;
+    }
+    expect(compiled.tree.args[1]).toEqual({ kind: "constant", value: 4 });
+  });
+
+  it("folds a near-integer window to an exact integer", () => {
+    const compiled = compileFormula("rolling_average({A}, 8.3 - 5.3)");
+    expect(compiled.tree.kind).toBe("call");
+    if (compiled.tree.kind !== "call") {
+      return;
+    }
+    expect(compiled.tree.args[1]).toEqual({ kind: "constant", value: 3 });
+  });
+
+  it("flags rolling_average of a ternary as conditional", () => {
+    const compiled = compileFormula("rolling_average({A} / {B} if {B} != 0 else 0, 3)");
+    expect(compiled.hasConditional).toBe(true);
+  });
 });
 
 // ─── safety: unsafe / unsupported syntax ─────────────────────────────────────

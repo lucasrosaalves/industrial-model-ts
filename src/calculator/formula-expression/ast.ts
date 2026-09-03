@@ -40,6 +40,11 @@ export type IfExpNode = {
   readonly body: ExprNode;
   readonly orelse: ExprNode;
 };
+export type CallNode = {
+  readonly kind: "call";
+  readonly name: string;
+  readonly args: readonly ExprNode[];
+};
 
 /** Any node of a compiled formula expression tree. */
 export type ExprNode =
@@ -49,11 +54,60 @@ export type ExprNode =
   | UnaryOpNode
   | CompareNode
   | BoolOpNode
-  | IfExpNode;
+  | IfExpNode
+  | CallNode;
 
 /** Nodes that make an expression require element-by-element evaluation. */
 export type ConditionalNode = CompareNode | BoolOpNode | IfExpNode;
 
 export function isConditionalNode(node: ExprNode): node is ConditionalNode {
   return node.kind === "compare" || node.kind === "boolop" || node.kind === "ifexp";
+}
+
+/** Walk an expression tree in pre-order. */
+export function walkExpr(node: ExprNode, visit: (node: ExprNode) => void): void {
+  visit(node);
+  switch (node.kind) {
+    case "binop":
+      walkExpr(node.left, visit);
+      walkExpr(node.right, visit);
+      break;
+    case "unaryop":
+      walkExpr(node.operand, visit);
+      break;
+    case "compare":
+      walkExpr(node.left, visit);
+      for (const comparator of node.comparators) {
+        walkExpr(comparator, visit);
+      }
+      break;
+    case "boolop":
+      for (const value of node.values) {
+        walkExpr(value, visit);
+      }
+      break;
+    case "ifexp":
+      walkExpr(node.test, visit);
+      walkExpr(node.body, visit);
+      walkExpr(node.orelse, visit);
+      break;
+    case "call":
+      for (const arg of node.args) {
+        walkExpr(arg, visit);
+      }
+      break;
+    default:
+      break;
+  }
+}
+
+/** Whether any compare / boolean / ``if`` node is present (including under calls). */
+export function treeHasConditional(tree: ExprNode): boolean {
+  let found = false;
+  walkExpr(tree, (node) => {
+    if (isConditionalNode(node)) {
+      found = true;
+    }
+  });
+  return found;
 }

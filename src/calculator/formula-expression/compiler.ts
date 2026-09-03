@@ -1,6 +1,8 @@
-import type { BinaryOp, BoolOpKind, CompareOp, ExprNode, UnaryOp } from "./ast";
-import { isConditionalNode } from "./ast";
-import { InvalidFormulaError } from "./exceptions";
+import type { BinaryOp, BoolOpKind, CallNode, CompareOp, ExprNode, UnaryOp } from "./ast";
+import { treeHasConditional, walkExpr } from "./ast";
+import { ArithmeticError, InvalidFormulaError } from "./exceptions";
+import { ALLOWED_FUNCTIONS } from "./functions";
+import { BINARY_OPS, UNARY_OPS } from "./ops";
 
 const PLACEHOLDER_RE = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const UNRESOLVED_BRACE_RE = /[{}]/;
@@ -82,8 +84,10 @@ function compileNormalized(raw: string): CompiledFormula {
     throw new InvalidFormulaError("formula contains invalid placeholder syntax");
   }
 
-  const tree = parse(expression);
-  validateTree(tree, new Set(nameMap.values()));
+  const parsed = parse(expression);
+  validateTree(parsed, new Set(nameMap.values()));
+  const tree = foldConstants(parsed);
+  validateFoldedFunctionArgs(tree);
   const hasConditional = treeHasConditional(tree);
 
   return { raw, expression, tree, variables, nameMap, hasConditional };
@@ -106,52 +110,153 @@ function replacePlaceholders(
 }
 
 function validateTree(tree: ExprNode, allowedNames: ReadonlySet<string>): void {
-  walk(tree, (node) => {
+  walkExpr(tree, (node) => {
     if (node.kind === "name" && !allowedNames.has(node.id)) {
       throw new InvalidFormulaError(`unknown formula identifier: ${node.id}`);
     }
   });
 }
 
-function treeHasConditional(tree: ExprNode): boolean {
-  let found = false;
-  walk(tree, (node) => {
-    if (isConditionalNode(node)) {
-      found = true;
+function validateCallShape(node: CallNode, hasKeywords: boolean, hasStarred: boolean): void {
+  const spec = ALLOWED_FUNCTIONS[node.name];
+  if (spec === undefined) {
+    if (node.name.startsWith(SAFE_NAME_PREFIX)) {
+      throw new InvalidFormulaError("unsupported formula element: Call");
     }
-  });
-  return found;
+    throw new InvalidFormulaError(`unknown formula function: ${node.name}`);
+  }
+
+  if (hasKeywords) {
+    throw new InvalidFormulaError(`${node.name}() does not accept keyword arguments`);
+  }
+  if (hasStarred) {
+    throw new InvalidFormulaError(`${node.name}() does not accept starred arguments`);
+  }
+  if (node.args.length !== spec.arity) {
+    throw new InvalidFormulaError(
+      `${node.name}() takes ${spec.arity} arguments, got ${node.args.length}`,
+    );
+  }
 }
 
-function walk(node: ExprNode, visit: (node: ExprNode) => void): void {
-  visit(node);
-  switch (node.kind) {
-    case "binop":
-      walk(node.left, visit);
-      walk(node.right, visit);
-      break;
-    case "unaryop":
-      walk(node.operand, visit);
-      break;
-    case "compare":
-      walk(node.left, visit);
-      for (const comparator of node.comparators) {
-        walk(comparator, visit);
-      }
-      break;
-    case "boolop":
-      for (const value of node.values) {
-        walk(value, visit);
-      }
-      break;
-    case "ifexp":
-      walk(node.test, visit);
-      walk(node.body, visit);
-      walk(node.orelse, visit);
-      break;
-    default:
-      break;
+function validateFoldedFunctionArgs(tree: ExprNode): void {
+  walkExpr(tree, (node) => {
+    if (node.kind !== "call") {
+      return;
+    }
+    const spec = ALLOWED_FUNCTIONS[node.name];
+    if (spec === undefined || spec.windowArg === null) {
+      return;
+    }
+    const windowNode = node.args[spec.windowArg];
+    if (windowNode === undefined || windowNode.kind !== "constant") {
+      throw new InvalidFormulaError(`${node.name}() window must be a numeric constant`);
+    }
+    if (toPositiveIntWindow(windowNode.value) === null) {
+      throw new InvalidFormulaError(`${node.name}() window must be a positive integer`);
+    }
+  });
+}
+
+/**
+ * Accept exact integers and values that only fail ``Number.isInteger``
+ * because of floating-point noise from folding (e.g. ``8.3 - 5.3``).
+ */
+function toPositiveIntWindow(value: number): number | null {
+  if (!Number.isFinite(value) || value < 1) {
+    return null;
   }
+  if (Number.isInteger(value)) {
+    return value;
+  }
+  const rounded = Math.round(value);
+  if (rounded < 1 || !Number.isSafeInteger(rounded)) {
+    return null;
+  }
+  const tolerance = Number.EPSILON * Math.max(1, Math.abs(value)) * 16;
+  if (Math.abs(value - rounded) <= tolerance) {
+    return rounded;
+  }
+  return null;
+}
+
+/**
+ * Collapse constant-only subtrees to a single constant at compile time.
+ *
+ * A fold that raises (e.g. division by zero) is skipped so the original
+ * runtime error semantics are preserved. Conditional/comparison nodes are
+ * never collapsed to a single constant: only their constant-only
+ * sub-expressions are folded.
+ */
+function foldConstants(node: ExprNode): ExprNode {
+  switch (node.kind) {
+    case "binop": {
+      const left = foldConstants(node.left);
+      const right = foldConstants(node.right);
+      if (left.kind === "constant" && right.kind === "constant") {
+        try {
+          return { kind: "constant", value: BINARY_OPS[node.op](left.value, right.value) };
+        } catch (error) {
+          if (error instanceof ArithmeticError) {
+            return { kind: "binop", op: node.op, left, right };
+          }
+          throw error;
+        }
+      }
+      return { kind: "binop", op: node.op, left, right };
+    }
+    case "unaryop": {
+      const operand = foldConstants(node.operand);
+      if (operand.kind === "constant") {
+        return { kind: "constant", value: UNARY_OPS[node.op](operand.value) };
+      }
+      return { kind: "unaryop", op: node.op, operand };
+    }
+    case "ifexp":
+      return {
+        kind: "ifexp",
+        test: foldConstants(node.test),
+        body: foldConstants(node.body),
+        orelse: foldConstants(node.orelse),
+      };
+    case "compare":
+      return {
+        kind: "compare",
+        left: foldConstants(node.left),
+        ops: node.ops,
+        comparators: node.comparators.map(foldConstants),
+      };
+    case "boolop":
+      return {
+        kind: "boolop",
+        op: node.op,
+        values: node.values.map(foldConstants),
+      };
+    case "call": {
+      const args = node.args.map(foldConstants);
+      return { kind: "call", name: node.name, args: foldCallWindowArg(node.name, args) };
+    }
+    default:
+      return node;
+  }
+}
+
+function foldCallWindowArg(name: string, args: readonly ExprNode[]): readonly ExprNode[] {
+  const spec = ALLOWED_FUNCTIONS[name];
+  if (spec === undefined || spec.windowArg === null) {
+    return args;
+  }
+  const windowNode = args[spec.windowArg];
+  if (windowNode === undefined || windowNode.kind !== "constant") {
+    return args;
+  }
+  const integer = toPositiveIntWindow(windowNode.value);
+  if (integer === null || integer === windowNode.value) {
+    return args;
+  }
+  return args.map((arg, index) =>
+    index === spec.windowArg ? { kind: "constant", value: integer } : arg,
+  );
 }
 
 // ─── Tokenizer ─────────────────────────────────────────────────────────────
@@ -164,7 +269,7 @@ type Token =
 const NUMBER_RE = /(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?/y;
 const IDENT_RE = /[A-Za-z_][A-Za-z0-9_]*/y;
 const TWO_CHAR_OPS = new Set(["**", "==", "!=", "<=", ">="]);
-const ONE_CHAR_OPS = new Set(["+", "-", "*", "/", "%", "(", ")", "<", ">"]);
+const ONE_CHAR_OPS = new Set(["+", "-", "*", "/", "%", "(", ")", "<", ">", ",", "="]);
 
 function tokenize(expression: string): Token[] {
   const tokens: Token[] = [];
@@ -386,6 +491,9 @@ class Parser {
         );
       }
       this.position += 1;
+      if (this.peekOp() === "(") {
+        return this.parseCall(token.value);
+      }
       return { kind: "name", id: token.value };
     }
 
@@ -397,6 +505,55 @@ class Parser {
     }
 
     throw new InvalidFormulaError(`invalid formula syntax: unexpected token '${token.value}'`);
+  }
+
+  private parseCall(name: string): CallNode {
+    this.expectOp("(");
+    const args: ExprNode[] = [];
+    let hasKeywords = false;
+    let hasStarred = false;
+
+    if (this.peekOp() !== ")") {
+      while (true) {
+        if (this.peekOp() === "*") {
+          hasStarred = true;
+          this.position += 1;
+          this.parseExpression();
+        } else if (this.isKeywordArg()) {
+          hasKeywords = true;
+          this.position += 1;
+          this.expectOp("=");
+          this.parseExpression();
+        } else {
+          args.push(this.parseExpression());
+        }
+
+        if (this.peekOp() !== ",") {
+          break;
+        }
+        this.position += 1;
+        if (this.peekOp() === ")") {
+          break;
+        }
+      }
+    }
+
+    this.expectOp(")");
+    const node: CallNode = { kind: "call", name, args };
+    validateCallShape(node, hasKeywords, hasStarred);
+    return node;
+  }
+
+  private isKeywordArg(): boolean {
+    const token = this.tokens[this.position];
+    const next = this.tokens[this.position + 1];
+    return (
+      token !== undefined &&
+      token.type === "name" &&
+      next !== undefined &&
+      next.type === "op" &&
+      next.value === "="
+    );
   }
 
   private peekOp(): string | undefined {

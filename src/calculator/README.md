@@ -16,6 +16,7 @@ The formula engine that powers it (`evaluate`) is also exported on its own, so y
 - [Real-world example: OEE](#real-world-example-oee)
 - [The standalone formula engine](#the-standalone-formula-engine)
 - [Supported operators](#supported-operators)
+- [Rolling average](#rolling-average)
 - [Error handling](#error-handling)
 - [API reference](#api-reference)
 
@@ -320,6 +321,7 @@ clearCache();
 - **Comparisons:** `==` `!=` `<` `<=` `>` `>=` (chained comparisons are supported, e.g. `0 <= {x} < 100`)
 - **Boolean:** `and` `or`
 - **Conditional:** `{A} / {B} if {B} != 0 else 0`
+- **Functions:** `rolling_average(series, N)` — simple moving average of the last `N` aligned points; see [Rolling average](#rolling-average)
 
 Comparisons, boolean operators, and conditionals are evaluated element-by-element, and only the selected branch runs for a given element — so a value-dependent failure (like division by zero) in an unselected branch never throws:
 
@@ -332,6 +334,67 @@ Modulo: the result takes the sign of the divisor (not JavaScript's `%`).
 
 ```ts
 evaluate("{A} % {B}", { A: [-7], B: [3] }); // [2], not [-1]
+```
+
+## Rolling average
+
+`rolling_average(series, N)` is a simple moving average over the last `N` aligned points. It is **count-based**, not time-based: `N` is a positive integer constant (literals and folded expressions like `12 * 2` or `6 / 2` are fine; a parameter `{WINDOW}` is not). The series argument can be any numeric sub-expression.
+
+The result is **the same length as the inputs**. At the start of a series there are fewer than `N` points, so those indexes average whatever exists so far (index 0 is itself; the true `N`-point average starts at index `N - 1`). There are no NaNs and no dropped timestamps, so `inputs[alias][i]` still corresponds to `datapoints[i]`.
+
+```ts
+evaluate("rolling_average({A}, 3)", { A: [10, 20, 30, 40] });
+// [10, 15, 20, 30]
+
+evaluate("rolling_average({A}, 3) - {B}", {
+  A: [10, 20, 30, 40],
+  B: [1, 2, 3, 4],
+});
+// [9, 13, 17, 26]
+```
+
+This is not a CDF bucket aggregate (`aggregateType: "average"` + `granularity`) and not time-weighted. Hourly aggregates plus `rolling_average({TEMP}, 24)` is the 24-hour moving average of hourly values. For raw irregular points it is “last N aligned samples.”
+
+`Calculator` still fetches `[start, end]` only. The first `N - 1` points in the result are a warmup; pass an earlier `start` if you need a full window at the beginning of the range you care about. Unknown function names, keyword arguments, starred arguments, and a non-constant or non-positive window still raise `InvalidFormulaError`.
+
+Put value-dependent guards **inside** the series argument. An outer `if` (or `and`/`or`) does not protect **neighbors in the window of a selected index**. A call that is never selected does not run. Indexes that do not select the call, and are not in a selected window, are not evaluated.
+
+```ts
+evaluate("rolling_average({A} / {B} if {B} != 0 else 0, 2)", {
+  A: [10, 20, 30],
+  B: [2, 0, 5],
+});
+// [5, 2.5, 3]  — the zero is replaced before the window sees it
+
+evaluate("rolling_average({A} / {B}, 2) if {C} > 0 else 0", {
+  A: [10, 20],
+  B: [5, 0],
+  C: [1, 0],
+});
+// [2, 0]  — index 0's window is only [0]; index 1 never selects the call
+
+evaluate("rolling_average({A} / {B}, 2) if {B} != 0 else 0", {
+  A: [10, 20, 30],
+  B: [2, 0, 5],
+});
+// throws ZeroDivisionError — index 2 selects the call; window [1, 2] includes B=0
+
+evaluate("rolling_average({A} / {B}, 2) if {C} > 0 else 0", {
+  A: [10, 20],
+  B: [0, 0],
+  C: [0, 0],
+});
+// [0, 0]  — the call is never selected, so the zero divisor is not evaluated
+```
+
+```ts
+evaluate("rolling_average({TEMP}, 24) - {SETPOINT}", {
+  TEMP: [100, 110, 120, 130],
+  SETPOINT: [105, 105, 110, 115],
+});
+// [-5, 0, 0, 0]
+// rolling_average(TEMP, 24) with only 4 points is the expanding mean:
+// [100, 105, 110, 115]
 ```
 
 ## Error handling
@@ -352,7 +415,7 @@ CalculatorError
 
 | Error | Raised when |
 |---|---|
-| `InvalidFormulaError` | The formula has invalid syntax or uses an unsupported operation |
+| `InvalidFormulaError` | The formula has invalid syntax, uses an unsupported operation, or calls an unknown function (including a non-constant or non-positive `rolling_average` window) |
 | `MissingParameterError` | The formula references a `{alias}` that wasn't provided in `parameters` |
 | `ParameterError` | A parameter value is not a valid numeric sequence |
 | `ParameterLengthError` | Referenced parameters don't all share the same length. Direct `evaluate()` calls raise this; `Calculator` aligns on timestamps before calling `evaluate`. |
