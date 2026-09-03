@@ -201,6 +201,24 @@ describe("renderTypes", () => {
     expect(output).toContain("export type Role = IndustrialModel<");
   });
 
+  it("marks edge-backed views with the IndustrialModel instance-type generic", () => {
+    const output = renderTypes(
+      [
+        {
+          viewName: "ImageAnnotation",
+          viewExternalId: "ImageAnnotation",
+          viewSpace: "annotation_space",
+          viewVersion: "1",
+          usedFor: "edge",
+          fields: [],
+        },
+      ],
+      mockConfig,
+    );
+
+    expect(output).toContain('export type ImageAnnotation = IndustrialModel<{\n\n}, {}, "edge">;');
+  });
+
   it("generates props and relation fields correctly", () => {
     const output = renderTypes(mockViews, mockConfig);
 

@@ -1,5 +1,5 @@
 import type { CachePort } from "./cache";
-import type { NodeDefinition, NodeOrEdge } from "./cognite";
+import type { EdgeDefinition, NodeDefinition, NodeOrEdge } from "./cognite";
 
 export type { NodeOrEdge };
 
@@ -34,12 +34,22 @@ type PrevDepth = {
 };
 
 export const MODEL_RELATIONS = Symbol("industrial-model.relations");
+export const MODEL_INSTANCE_TYPE = Symbol("industrial-model.instance-type");
 
-export type IndustrialModel<TProps, TRelations = {}> = Simplify<
-  TProps & { readonly [MODEL_RELATIONS]?: TRelations }
+export type IndustrialModel<
+  TProps,
+  TRelations = {},
+  TInstanceType extends "node" | "edge" = "node",
+> = Simplify<
+  TProps & {
+    readonly [MODEL_RELATIONS]?: TRelations;
+    readonly [MODEL_INSTANCE_TYPE]?: TInstanceType;
+  }
 >;
 
-export type ModelProps<TModel> = Simplify<Omit<TModel, typeof MODEL_RELATIONS>>;
+export type ModelProps<TModel> = Simplify<
+  Omit<TModel, typeof MODEL_RELATIONS | typeof MODEL_INSTANCE_TYPE>
+>;
 export type ModelRelations<TModel> = TModel extends {
   readonly [MODEL_RELATIONS]?: infer TRelations;
 }
@@ -115,10 +125,31 @@ export type QueryOptions<
   cursor?: string | null;
 };
 
-export type QueryResultMetadata = Pick<
+type ModelInstanceType<TModel> = TModel extends {
+  readonly [MODEL_INSTANCE_TYPE]?: "edge";
+}
+  ? "edge"
+  : "node";
+
+type NodeResultMetadata = Pick<
   NodeDefinition,
   "space" | "externalId" | "version" | "createdTime" | "deletedTime" | "lastUpdatedTime"
 >;
+
+type EdgeResultMetadata = Pick<
+  EdgeDefinition,
+  | "space"
+  | "externalId"
+  | "version"
+  | "createdTime"
+  | "deletedTime"
+  | "lastUpdatedTime"
+  | "startNode"
+  | "endNode"
+>;
+
+export type QueryResultMetadata<TModel = unknown> =
+  ModelInstanceType<TModel> extends "edge" ? EdgeResultMetadata : NodeResultMetadata;
 
 type ResultShapeForKey<TModel, K extends PropertyKey> = K extends keyof ModelProps<TModel>
   ? ModelProps<TModel>[K]
@@ -190,11 +221,11 @@ export type QueryResultItem<
   TSelect extends QuerySelect<TModel> | undefined = undefined,
   TDepth extends QueryDepth = 3,
 > = [TSelect] extends [undefined]
-  ? Merge<QueryResultMetadata, ModelProps<TModel>>
+  ? Merge<QueryResultMetadata<TModel>, ModelProps<TModel>>
   : Merge<
       TSelect extends { _all: true }
-        ? Merge<QueryResultMetadata, ModelProps<TModel>>
-        : QueryResultMetadata,
+        ? Merge<QueryResultMetadata<TModel>, ModelProps<TModel>>
+        : QueryResultMetadata<TModel>,
       ExplicitSelectionResult<TModel, TSelect, TDepth>
     >;
 

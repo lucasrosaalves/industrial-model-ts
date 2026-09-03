@@ -466,4 +466,84 @@ describe("Cognite Core module", () => {
       { instanceType: "node", space: "asset-space", externalId: "pump-1" },
     ]);
   });
+
+  it("queries Cognite360ImageAnnotation edge metadata", async () => {
+    const annotationEdge = {
+      instanceType: "edge" as const,
+      space: "annotation-space",
+      externalId: "object-1-image-360-annotation-image-1",
+      startNode: { space: "object-space", externalId: "object-1" },
+      endNode: { space: "image-space", externalId: "image-1" },
+      properties: {
+        cdf_cdm: {
+          "Cognite360ImageAnnotation/v1": {
+            confidence: 0.92,
+            polygon: [0.1, 0.2, 0.3, 0.4],
+          },
+        },
+      },
+    };
+
+    const client = makeCogniteClientMock({
+      queryItems: {
+        Cognite360ImageAnnotation: [annotationEdge],
+      },
+    });
+    const core = new CogniteCoreClient(client);
+
+    const { items } = await core.query("Cognite360ImageAnnotation")({
+      select: { confidence: true, polygon: true },
+    });
+
+    expect(client.instances.query).toHaveBeenCalledWith(
+      expect.objectContaining({
+        with: expect.objectContaining({
+          Cognite360ImageAnnotation: expect.objectContaining({
+            edges: expect.objectContaining({
+              filter: {
+                and: [
+                  {
+                    hasData: [
+                      {
+                        type: "view",
+                        space: "cdf_cdm",
+                        externalId: "Cognite360ImageAnnotation",
+                        version: "v1",
+                      },
+                    ],
+                  },
+                ],
+              },
+            }),
+          }),
+        }),
+        select: expect.objectContaining({
+          Cognite360ImageAnnotation: {
+            sources: [
+              {
+                source: {
+                  type: "view",
+                  space: "cdf_cdm",
+                  externalId: "Cognite360ImageAnnotation",
+                  version: "v1",
+                },
+                properties: ["confidence", "polygon"],
+              },
+            ],
+          },
+        }),
+      }),
+    );
+    expect(items).toEqual([
+      {
+        instanceType: "edge",
+        space: "annotation-space",
+        externalId: "object-1-image-360-annotation-image-1",
+        startNode: { space: "object-space", externalId: "object-1" },
+        endNode: { space: "image-space", externalId: "image-1" },
+        confidence: 0.92,
+        polygon: [0.1, 0.2, 0.3, 0.4],
+      },
+    ]);
+  });
 });

@@ -80,6 +80,89 @@ describe("QueryMapper", () => {
     });
   });
 
+  it("builds a root edges query for edge-backed views", async () => {
+    const query = await mapper.map<{ confidence?: number; polygon?: number[] }>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { confidence: true, polygon: true },
+      limit: 10,
+    });
+
+    expect(query.with.Cognite360ImageAnnotation).toEqual({
+      edges: {
+        filter: {
+          and: [
+            {
+              hasData: [
+                {
+                  type: "view",
+                  space: "cdf_cdm",
+                  externalId: "Cognite360ImageAnnotation",
+                  version: "v1",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      sort: [],
+      limit: 10,
+    });
+    expect(query.select.Cognite360ImageAnnotation).toEqual({
+      sources: [
+        {
+          source: {
+            type: "view",
+            space: "cdf_cdm",
+            externalId: "Cognite360ImageAnnotation",
+            version: "v1",
+          },
+          properties: ["confidence", "polygon"],
+        },
+      ],
+    });
+  });
+
+  it("maps scalar filters and sorts on root edge views", async () => {
+    const query = await mapper.map<{ confidence?: number }>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      filters: { confidence: { gte: 0.8 } },
+      sort: { confidence: "descending" },
+    });
+
+    expect(query.with.Cognite360ImageAnnotation).toEqual({
+      edges: {
+        filter: {
+          and: [
+            {
+              hasData: [
+                {
+                  type: "view",
+                  space: "cdf_cdm",
+                  externalId: "Cognite360ImageAnnotation",
+                  version: "v1",
+                },
+              ],
+            },
+            {
+              range: {
+                property: ["cdf_cdm", "Cognite360ImageAnnotation/v1", "confidence"],
+                gte: 0.8,
+              },
+            },
+          ],
+        },
+      },
+      sort: [
+        {
+          property: ["cdf_cdm", "Cognite360ImageAnnotation/v1", "confidence"],
+          direction: "descending",
+          nullsFirst: true,
+        },
+      ],
+      limit: 1_000,
+    });
+  });
+
   it("uses Cognite's max root limit when auto-paginating all pages", async () => {
     const query = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
@@ -294,6 +377,15 @@ describe("QueryMapper", () => {
           select: { parent: { namme: true } } as never,
         }),
       ).rejects.toThrow(/select\.parent: Unrecognized key: "namme"/);
+    });
+
+    it("rejects relation traversal from an edge-backed root view", async () => {
+      await expect(
+        mapper.map({
+          viewExternalId: "Cognite360ImageAnnotation",
+          select: { source: { name: true } } as never,
+        }),
+      ).rejects.toThrow(/relation traversal from edge views is not supported/);
     });
 
     it("rejects unknown filter properties", async () => {

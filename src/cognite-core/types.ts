@@ -123,7 +123,8 @@ export type Cognite360ImageAnnotation = IndustrialModel<
   },
   {
     source?: CogniteSourceSystem;
-  }
+  },
+  "edge"
 >;
 
 export type Cognite360ImageCollection = IndustrialModel<
@@ -272,7 +273,8 @@ export type CogniteAnnotation = IndustrialModel<
   },
   {
     source?: CogniteSourceSystem;
-  }
+  },
+  "edge"
 >;
 
 export type CogniteAsset = IndustrialModel<
@@ -437,7 +439,8 @@ export type CogniteDiagramAnnotation = IndustrialModel<
   },
   {
     source?: CogniteSourceSystem;
-  }
+  },
+  "edge"
 >;
 
 export type CogniteEquipment = IndustrialModel<

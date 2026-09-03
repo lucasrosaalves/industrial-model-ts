@@ -85,10 +85,41 @@ export class QueryResultMapper {
     }
 
     const rootView = await this.viewMapper.getView(rootNode);
+    if (rootView.usedFor === "edge") {
+      return this.mapRootEdges(rootNode, rootView, queryResult);
+    }
     const values = await this.mapNodeProperty(rootNode, rootView, queryResult);
     if (!values) return [];
 
     return [...values.values()].flatMap((nodes) => nodes.map((n) => this.nodeToDict(n)));
+  }
+
+  private mapRootEdges(
+    key: string,
+    view: ViewDefinition,
+    queryResult: QueryResultMap,
+  ): Record<string, unknown>[] {
+    const viewKey = `${view.externalId}/${view.version}`;
+    const visited = new Set<string>();
+    const result: Record<string, unknown>[] = [];
+
+    for (const item of queryResult[key] ?? []) {
+      if (item.instanceType !== "edge") continue;
+      const edge = item as EdgeDefinition;
+      const id = `${edge.space}:${edge.externalId}`;
+      if (visited.has(id)) continue;
+      visited.add(id);
+
+      const properties = {
+        ...(edge.properties?.[view.space]?.[viewKey] ?? {}),
+      };
+      coerceTemporalProperties(view, properties);
+      result.push(
+        this.edgeToDict({ ...edge, properties: { [view.space]: { [viewKey]: properties } } }),
+      );
+    }
+
+    return result;
   }
 
   private async mapNodeProperty(
@@ -279,6 +310,19 @@ export class QueryResultMapper {
 
   private nodeToDict(node: NodeDefinition): Record<string, unknown> {
     const { properties, ...rest } = node;
+    const entry: Record<string, unknown> = { ...rest };
+
+    for (const spaceProp of Object.values(properties ?? {})) {
+      for (const viewProp of Object.values(spaceProp)) {
+        Object.assign(entry, viewProp);
+      }
+    }
+
+    return entry;
+  }
+
+  private edgeToDict(edge: EdgeDefinition): Record<string, unknown> {
+    const { properties, ...rest } = edge;
     const entry: Record<string, unknown> = { ...rest };
 
     for (const spaceProp of Object.values(properties ?? {})) {

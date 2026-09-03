@@ -15,6 +15,10 @@ generated/MyDataModel/
 └── index.ts     # Re-exports
 ```
 
+Views declared as `usedFor: "edge"` are generated as `IndustrialModel<Props, Relations, "edge">`
+aliases. Query results for those views include edge endpoints (`startNode` and `endNode`) in
+addition to selected properties.
+
 ## Usage
 
 ```bash

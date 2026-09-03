@@ -28,6 +28,7 @@ export interface ViewDefinition {
   viewExternalId: string;
   viewSpace: string;
   viewVersion: string;
+  usedFor?: "node" | "edge";
   fields: FieldDefinition[];
 }
 

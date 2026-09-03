@@ -289,6 +289,13 @@ export class QueryValidator {
         continue;
       }
 
+      if (view.usedFor === "edge") {
+        errors.push(
+          `${issuePath([...path, name])}: relation traversal from edge views is not supported`,
+        );
+        continue;
+      }
+
       if (isReverseDirectRelation(property) && property.targetsList) {
         errors.push(
           `${issuePath([...path, name])}: cannot select "${name}" — Cognite does not support inward traversal of list direct relations. Query "${property.source.externalId}" directly and filter by the "${property.through.identifier}" field instead.`,
@@ -372,6 +379,12 @@ export class QueryValidator {
       if (isViewPropertyDefinition(property)) {
         const target = getDirectRelationSource(property);
         if (target != null && !isLeafFilter(value)) {
+          if (view.usedFor === "edge") {
+            errors.push(
+              `${issuePath([...path, name])}: relation traversal from edge views is not supported`,
+            );
+            continue;
+          }
           const targetView = await this.viewMapper.getView(target.externalId);
           errors.push(...(await this.validateFilters(value, targetView, [...path, name])));
         } else {

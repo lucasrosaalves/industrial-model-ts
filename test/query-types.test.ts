@@ -23,7 +23,38 @@ type CogniteAsset = IndustrialModel<
   }
 >;
 
+type ImageAnnotation = IndustrialModel<
+  {
+    confidence?: number;
+    polygon?: number[];
+  },
+  object,
+  "edge"
+>;
+
 describe("query typing", () => {
+  it("includes edge endpoints in selected edge-view results", async () => {
+    const model = new IndustrialModelClient(
+      makeCogniteClientMock({
+        queryItems: { Cognite360ImageAnnotation: [] },
+      }),
+      COGNITE_CORE_DATA_MODEL,
+    );
+
+    const { items } = await model.query<ImageAnnotation>()({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { confidence: true, polygon: true },
+    });
+
+    type Item = (typeof items)[number];
+    expectTypeOf<Item["startNode"]>().toEqualTypeOf<NodeId>();
+    expectTypeOf<Item["endNode"]>().toEqualTypeOf<NodeId>();
+    expectTypeOf<Item["confidence"]>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<Item["polygon"]>().toEqualTypeOf<number[] | undefined>();
+    // @ts-expect-error name was not selected.
+    items[0]?.name;
+  });
+
   it("infers nested relation fields from the select tree", async () => {
     const client = makeCogniteClientMock({
       queryItems: makeCogniteAssetQueryResult(),

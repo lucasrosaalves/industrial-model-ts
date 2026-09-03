@@ -60,13 +60,22 @@ export class QueryMapper {
     const baseFilters: FilterDefinition[] = [{ hasData: [rootViewRef] }, ...whereFilters];
 
     const withExprs: Record<string, QueryTableExpression> = {
-      [viewExternalId]: {
-        nodes: {
-          filter: { and: baseFilters } as TableExpressionFilter,
-        },
-        sort: this.sortMapper.map(sort, rootView),
-        limit,
-      },
+      [viewExternalId]:
+        rootView.usedFor === "edge"
+          ? {
+              edges: {
+                filter: { and: baseFilters } as TableExpressionFilter,
+              },
+              sort: this.sortMapper.map(sort, rootView, "edge"),
+              limit,
+            }
+          : {
+              nodes: {
+                filter: { and: baseFilters } as TableExpressionFilter,
+              },
+              sort: this.sortMapper.map(sort, rootView),
+              limit,
+            },
     };
     const selectExprs: Record<string, QuerySelectExpression | Record<string, never>> = {};
 

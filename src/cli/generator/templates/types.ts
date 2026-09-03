@@ -95,7 +95,7 @@ function renderView(view: ViewDefinition): string {
 
     return `export type ${view.viewName} = IndustrialModel<{
 ${propsLines.join("\n")}
-}>;`;
+}${view.usedFor === "edge" ? ', {}, "edge"' : ""}>;`;
   }
 
   const propsLines = propsFields.map(
@@ -111,7 +111,7 @@ ${propsLines.join("\n")}
   },
   {
 ${relLines.join("\n")}
-  }
+  }${view.usedFor === "edge" ? ',\n  "edge"' : ""}
 >;`;
 }
 

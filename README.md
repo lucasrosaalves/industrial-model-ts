@@ -477,6 +477,26 @@ const { items } = await model.query<Cognite3DObject>()({
 });
 ```
 
+### Edge Views
+
+Views declared by Cognite as `usedFor: "edge"` can be queried as root views. Their results include
+the edge identity and endpoints alongside the selected view properties.
+
+```ts
+const { items } = await core.query("Cognite360ImageAnnotation")({
+  select: {
+    confidence: true,
+    polygon: true,
+  },
+});
+
+const annotation = items[0];
+// annotation.startNode, annotation.endNode, annotation.confidence, annotation.polygon
+```
+
+Root edge-view queries support scalar selections, filters, sorting, and pagination. Traversing
+relations from a root edge view and writing edge-view properties are not supported.
+
 ## Pagination
 
 `query()` returns a root cursor when more root-view items are available.
