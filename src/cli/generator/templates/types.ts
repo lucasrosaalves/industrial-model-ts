@@ -51,6 +51,8 @@ export function renderTypes(
   }
 
   lines.push(renderViewExternalIdUnion(views, config));
+  lines.push("");
+  lines.push(renderEdgeAndNodeViewExternalIdUnions(views, config));
 
   for (const view of views) {
     lines.push("");
@@ -68,6 +70,26 @@ export function renderTypes(
 function renderViewExternalIdUnion(views: ViewDefinition[], config: GeneratorConfig): string {
   return `export type ${config.clientName}ViewExternalId =
 ${views.map((view) => `  | "${view.viewExternalId}"`).join("\n")};`;
+}
+
+function renderEdgeAndNodeViewExternalIdUnions(
+  views: ViewDefinition[],
+  config: GeneratorConfig,
+): string {
+  const name = config.clientName;
+  const edgeViews = views.filter((view) => view.usedFor === "edge");
+  const edgeUnion =
+    edgeViews.length === 0
+      ? `export type ${name}EdgeViewExternalId = never;`
+      : `export type ${name}EdgeViewExternalId =
+${edgeViews.map((view) => `  | "${view.viewExternalId}"`).join("\n")};`;
+
+  return `${edgeUnion}
+
+export type ${name}NodeViewExternalId = Exclude<
+  ${name}ViewExternalId,
+  ${name}EdgeViewExternalId
+>;`;
 }
 
 function renderEnumTypeAliases(views: ViewDefinition[]): string {
@@ -95,7 +117,7 @@ function renderView(view: ViewDefinition): string {
 
     return `export type ${view.viewName} = IndustrialModel<{
 ${propsLines.join("\n")}
-}>;`;
+}${view.usedFor === "edge" ? ', {}, "edge"' : ""}>;`;
   }
 
   const propsLines = propsFields.map(
@@ -111,7 +133,7 @@ ${propsLines.join("\n")}
   },
   {
 ${relLines.join("\n")}
-  }
+  }${view.usedFor === "edge" ? ',\n  "edge"' : ""}
 >;`;
 }
 
@@ -149,7 +171,7 @@ function renderExecutors(config: GeneratorConfig): string {
   ): Promise<QueryResult<QueryResultItem<${name}Model<TView>, undefined>>>;
 };
 
-export type ${name}AggregateExecutor<TView extends ${name}ViewExternalId> = <
+export type ${name}AggregateExecutor<TView extends ${name}NodeViewExternalId> = <
   const TOptions extends Omit<AggregateOptions<${name}Model<TView>>, "viewExternalId">,
 >(
   options?: TOptions,
@@ -159,7 +181,7 @@ export type ${name}AggregateExecutor<TView extends ${name}ViewExternalId> = <
   >
 >;
 
-export type ${name}UpsertExecutor<TView extends ${name}ViewExternalId> = (
+export type ${name}UpsertExecutor<TView extends ${name}NodeViewExternalId> = (
   options: Omit<UpsertOptions<${name}Model<TView>>, "viewExternalId">,
 ) => Promise<UpsertResult>;`;
 }

@@ -477,6 +477,41 @@ const { items } = await model.query<Cognite3DObject>()({
 });
 ```
 
+### Edge Views
+
+Views declared by Cognite as `usedFor: "edge"` can be queried as root views. Their results include
+the edge identity and endpoints alongside the selected view properties.
+
+```ts
+const image = { space: "image-space", externalId: "image-1" };
+
+const { items } = await core.query("Cognite360ImageAnnotation")({
+  select: {
+    confidence: true,
+    polygon: true,
+  },
+  filters: {
+    endNode: { eq: image },
+  },
+});
+
+const annotation = items[0];
+// annotation.startNode, annotation.endNode, annotation.type, annotation.confidence, annotation.polygon
+```
+
+Root edge-view queries support scalar selections, filters, sorting, search, and pagination.
+They can filter and sort by the intrinsic edge `startNode`, `endNode`, and `type` fields.
+Traversing relations from a root edge view is not supported.
+
+Edge views are **query-only**:
+
+- Generated per-view shortcuts expose only `query` for edge views (`aggregate`, `upsert`, and
+  `delete` are omitted).
+- `CogniteCoreClient` / generated client `aggregate` and `upsert` accept node view ids only
+  (`*NodeViewExternalId`). Calling them with an edge view id is a TypeScript error and is rejected
+  at runtime.
+- Top-level `delete(ids)` remains view-independent and always deletes nodes.
+
 ## Pagination
 
 `query()` returns a root cursor when more root-view items are available.

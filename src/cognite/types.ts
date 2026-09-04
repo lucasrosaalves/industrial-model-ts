@@ -43,6 +43,7 @@ export interface ViewDefinition {
   space: string;
   externalId: string;
   version: string;
+  usedFor?: "node" | "edge";
   properties: Record<string, ViewDefinitionProperty>;
 }
 
@@ -50,8 +51,8 @@ export type FilterDefinition =
   | { and: FilterDefinition[] }
   | { or: FilterDefinition[] }
   | { not: FilterDefinition }
-  | { equals: { property: string[]; value: string | number | boolean } }
-  | { in: { property: string[]; values: (string | number | boolean)[] } }
+  | { equals: { property: string[]; value: string | number | boolean | NodeId } }
+  | { in: { property: string[]; values: (string | number | boolean | NodeId)[] } }
   | {
       range: {
         property: string[];
@@ -96,11 +97,12 @@ export interface QueryNodeTableExpression {
 
 export interface QueryEdgeTableExpression {
   edges: {
-    from: string;
+    from?: string;
     maxDistance?: number;
     filter?: TableExpressionFilter;
     direction?: "outwards" | "inwards";
   };
+  sort?: PropertySort[];
   limit?: number;
 }
 
@@ -175,10 +177,16 @@ export interface NodeDefinition {
 
 export interface EdgeDefinition {
   instanceType: "edge";
+  version?: number;
   space: string;
   externalId: string;
+  type?: { space: string; externalId: string };
   startNode: { space: string; externalId: string };
   endNode: { space: string; externalId: string };
+  properties?: Record<string, Record<string, Record<string, unknown>>>;
+  createdTime?: number;
+  deletedTime?: number;
+  lastUpdatedTime?: number;
 }
 
 export type NodeOrEdge = NodeDefinition | EdgeDefinition;
@@ -191,7 +199,7 @@ export interface InstancesQueryResponse {
 export interface InstancesSearchRequest {
   view: ViewReference;
   query: string;
-  instanceType: "node";
+  instanceType: "node" | "edge";
   properties: string[];
   operator?: "OR" | "AND";
   filter?: FilterDefinition;

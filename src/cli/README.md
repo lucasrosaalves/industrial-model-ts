@@ -15,6 +15,12 @@ generated/MyDataModel/
 └── index.ts     # Re-exports
 ```
 
+Views declared as `usedFor: "edge"` are generated as `IndustrialModel<Props, Relations, "edge">`
+aliases. Query results for those views include edge endpoints (`startNode` and `endNode`) in
+addition to selected properties. Generated per-view shortcuts for edge views expose `query` only;
+`aggregate`, `upsert`, and `delete` are omitted. Class-level `aggregate` / `upsert` are typed
+against `*NodeViewExternalId` so edge view ids are rejected.
+
 ## Usage
 
 ```bash

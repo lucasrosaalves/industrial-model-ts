@@ -235,6 +235,175 @@ describe("IndustrialModelClient", () => {
     expect(items[0]).not.toHaveProperty("sourceCreatedTime");
   });
 
+  it("validates edge query results including endpoints and selected metadata", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: {
+        Cognite360ImageAnnotation: [
+          {
+            instanceType: "edge",
+            space: "annotation-space",
+            externalId: "annotation-1",
+            type: { space: "cdf_cdm", externalId: "image-360-annotation" },
+            startNode: { space: "object-space", externalId: "object-1" },
+            endNode: { space: "image-space", externalId: "image-1" },
+            properties: {
+              cdf_cdm: {
+                "Cognite360ImageAnnotation/v1": {
+                  confidence: 0.92,
+                  polygon: [0.1, 0.2, 0.3, 0.4],
+                  formatVersion: "1.0.0",
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, {
+      validateResults: true,
+    });
+
+    type Annotation = IndustrialModel<
+      { confidence?: number; polygon?: number[]; formatVersion?: string },
+      object,
+      "edge"
+    >;
+    const { items } = await model.query<Annotation>()({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { confidence: true, polygon: true, formatVersion: true },
+    });
+
+    expect(items).toEqual([
+      {
+        instanceType: "edge",
+        space: "annotation-space",
+        externalId: "annotation-1",
+        type: { space: "cdf_cdm", externalId: "image-360-annotation" },
+        startNode: { space: "object-space", externalId: "object-1" },
+        endNode: { space: "image-space", externalId: "image-1" },
+        confidence: 0.92,
+        polygon: [0.1, 0.2, 0.3, 0.4],
+        formatVersion: "1.0.0",
+      },
+    ]);
+  });
+
+  it("validates edge _all results that include Cognite intrinsic type", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: {
+        Cognite360ImageAnnotation: [
+          {
+            instanceType: "edge",
+            space: "annotation-space",
+            externalId: "annotation-1",
+            type: { space: "cdf_cdm", externalId: "image-360-annotation" },
+            startNode: { space: "object-space", externalId: "object-1" },
+            endNode: { space: "image-space", externalId: "image-1" },
+            properties: {
+              cdf_cdm: {
+                "Cognite360ImageAnnotation/v1": {
+                  confidence: 0.5,
+                  formatVersion: "2",
+                },
+              },
+            },
+          },
+        ],
+      },
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, {
+      validateResults: true,
+    });
+
+    type Annotation = IndustrialModel<
+      { confidence?: number; formatVersion?: string },
+      object,
+      "edge"
+    >;
+    const { items } = await model.query<Annotation>()({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { _all: true },
+    });
+
+    expect(items[0]).toMatchObject({
+      instanceType: "edge",
+      type: { space: "cdf_cdm", externalId: "image-360-annotation" },
+      startNode: { space: "object-space", externalId: "object-1" },
+      endNode: { space: "image-space", externalId: "image-1" },
+      confidence: 0.5,
+      formatVersion: "2",
+    });
+  });
+
+  it("preserves mock order for sorted edge query results", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: {
+        Cognite360ImageAnnotation: [
+          {
+            instanceType: "edge",
+            space: "annotation-space",
+            externalId: "annotation-a",
+            startNode: { space: "object-space", externalId: "object-1" },
+            endNode: { space: "image-space", externalId: "image-1" },
+            properties: {
+              cdf_cdm: {
+                "Cognite360ImageAnnotation/v1": { formatVersion: "1.0.0" },
+              },
+            },
+          },
+          {
+            instanceType: "edge",
+            space: "annotation-space",
+            externalId: "annotation-b",
+            startNode: { space: "object-space", externalId: "object-2" },
+            endNode: { space: "image-space", externalId: "image-2" },
+            properties: {
+              cdf_cdm: {
+                "Cognite360ImageAnnotation/v1": { formatVersion: "2.0.0" },
+              },
+            },
+          },
+        ],
+      },
+    });
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    type Annotation = IndustrialModel<{ formatVersion?: string }, object, "edge">;
+    const { items } = await model.query<Annotation>()({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { formatVersion: true },
+      sort: { formatVersion: "ascending" },
+      limit: 2,
+    });
+
+    expect(items.map((item) => item.externalId)).toEqual(["annotation-a", "annotation-b"]);
+    expect(items.map((item) => item.formatVersion)).toEqual(["1.0.0", "2.0.0"]);
+  });
+
+  it("rejects aggregate on edge-backed views", async () => {
+    const client = makeCogniteClientMock();
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    await expect(
+      model.aggregate()({
+        viewExternalId: "Cognite360ImageAnnotation",
+        aggregates: { count: {} },
+      }),
+    ).rejects.toThrow(/edge views are query-only; aggregate is not supported/);
+  });
+
+  it("rejects upsert on edge-backed views", async () => {
+    const client = makeCogniteClientMock();
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL);
+
+    await expect(
+      model.upsert()({
+        viewExternalId: "Cognite360ImageAnnotation",
+        items: [{ space: "annotation-space", externalId: "annotation-1" }],
+      }),
+    ).rejects.toThrow(/edge views are query-only; upsert is not supported/);
+  });
+
   it("runs upsert end-to-end with mocked CogniteClient", async () => {
     const client = makeCogniteClientMock({
       applyResponse: {

@@ -58,6 +58,7 @@ function parseView(view: CogniteViewDefinition): ViewDefinition {
     viewExternalId: view.externalId,
     viewSpace: view.space,
     viewVersion: view.version,
+    usedFor: view.usedFor ?? "node",
     fields,
   };
 }

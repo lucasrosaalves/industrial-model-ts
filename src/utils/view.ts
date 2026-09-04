@@ -15,6 +15,7 @@ const NODE_PROPERTIES = new Set([
   "deletedTime",
   "lastUpdatedTime",
 ]);
+const EDGE_PROPERTIES = new Set(["startNode", "endNode", "type"]);
 
 export function getPropertyRef(
   property: string,
@@ -22,6 +23,7 @@ export function getPropertyRef(
   instanceType: "node" | "edge" = "node",
 ): string[] {
   if (NODE_PROPERTIES.has(property)) return [instanceType, property];
+  if (instanceType === "edge" && EDGE_PROPERTIES.has(property)) return ["edge", property];
   return [view.space, `${view.externalId}/${view.version}`, property];
 }
 

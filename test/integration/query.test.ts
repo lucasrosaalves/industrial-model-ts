@@ -26,6 +26,23 @@ describeIntegration("integration query", () => {
     }
   });
 
+  it("queries Cognite360ImageAnnotation edge views", async () => {
+    const result = await core().query("Cognite360ImageAnnotation")({
+      select: { confidence: true, polygon: true },
+      limit: 10,
+    });
+
+    expect(Array.isArray(result.items)).toBe(true);
+    for (const item of result.items) {
+      expect(item.startNode).toEqual(
+        expect.objectContaining({ space: expect.any(String), externalId: expect.any(String) }),
+      );
+      expect(item.endNode).toEqual(
+        expect.objectContaining({ space: expect.any(String), externalId: expect.any(String) }),
+      );
+    }
+  });
+
   it("queries CogniteAssetType with filters and sort", async () => {
     const result = await core().query("CogniteAssetType")({
       filters: { code: { eq: "TESTING_123" } },

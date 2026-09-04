@@ -14,6 +14,7 @@ import { nodeIdSchema } from "../validation";
 const NODE_STRING_PROPERTIES = ["externalId", "space"] as const;
 const NODE_NUMBER_PROPERTIES = ["createdTime", "deletedTime", "lastUpdatedTime"] as const;
 const NODE_PROPERTIES = new Set<string>([...NODE_STRING_PROPERTIES, ...NODE_NUMBER_PROPERTIES]);
+const EDGE_NODE_ID_PROPERTIES = ["startNode", "endNode", "type"] as const;
 const SORT_DIRECTION_SCHEMA = z.enum(["ascending", "descending"]);
 
 const recordSchema = z.record(z.string(), z.unknown());
@@ -58,10 +59,11 @@ function getRelationTarget(property: ViewDefinitionProperty): string | null {
 }
 
 function baseValueSchema(
-  property: ViewPropertyDefinition | "node-string" | "node-number",
+  property: ViewPropertyDefinition | "node-string" | "node-number" | "edge-node-id",
 ): z.ZodType {
   if (property === "node-string") return z.string();
   if (property === "node-number") return z.number();
+  if (property === "edge-node-id") return nodeIdSchema;
 
   switch (property.type.type) {
     case "text":
@@ -86,7 +88,7 @@ function baseValueSchema(
 }
 
 function leafFilterSchema(
-  property: ViewPropertyDefinition | "node-string" | "node-number",
+  property: ViewPropertyDefinition | "node-string" | "node-number" | "edge-node-id",
 ): z.ZodType {
   const value = baseValueSchema(property);
   const isList = typeof property !== "string" && property.type.list === true;
@@ -129,6 +131,16 @@ function leafFilterSchema(
         .optional();
     }
     return z.object(shape).strict();
+  }
+
+  if (property === "edge-node-id") {
+    return z
+      .object({
+        eq: value.optional(),
+        in: z.array(value).optional(),
+        exists: z.boolean().optional(),
+      })
+      .strict();
   }
 
   if (typeof property !== "string" && property.type.type === "enum") {
@@ -289,6 +301,13 @@ export class QueryValidator {
         continue;
       }
 
+      if (view.usedFor === "edge") {
+        errors.push(
+          `${issuePath([...path, name])}: relation traversal from edge views is not supported`,
+        );
+        continue;
+      }
+
       if (isReverseDirectRelation(property) && property.targetsList) {
         errors.push(
           `${issuePath([...path, name])}: cannot select "${name}" — Cognite does not support inward traversal of list direct relations. Query "${property.source.externalId}" directly and filter by the "${property.through.identifier}" field instead.`,
@@ -331,6 +350,11 @@ export class QueryValidator {
     for (const property of Object.keys(view.properties)) {
       shape[property] = z.unknown().optional();
     }
+    if (view.usedFor === "edge") {
+      for (const property of EDGE_NODE_ID_PROPERTIES) {
+        shape[property] = z.unknown().optional();
+      }
+    }
 
     const result = z.object(shape).strict().safeParse(filters);
     if (!result.success) return formatZodIssues(result.error, path);
@@ -366,12 +390,26 @@ export class QueryValidator {
         continue;
       }
 
+      if (
+        view.usedFor === "edge" &&
+        EDGE_NODE_ID_PROPERTIES.includes(name as (typeof EDGE_NODE_ID_PROPERTIES)[number])
+      ) {
+        errors.push(...this.validateLeafFilter(value, "edge-node-id", [...path, name]));
+        continue;
+      }
+
       const property = view.properties[name];
       if (!property) continue;
 
       if (isViewPropertyDefinition(property)) {
         const target = getDirectRelationSource(property);
         if (target != null && !isLeafFilter(value)) {
+          if (view.usedFor === "edge") {
+            errors.push(
+              `${issuePath([...path, name])}: relation traversal from edge views is not supported`,
+            );
+            continue;
+          }
           const targetView = await this.viewMapper.getView(target.externalId);
           errors.push(...(await this.validateFilters(value, targetView, [...path, name])));
         } else {
@@ -396,7 +434,7 @@ export class QueryValidator {
 
   private validateLeafFilter(
     value: Record<string, unknown>,
-    property: ViewPropertyDefinition | "node-string" | "node-number",
+    property: ViewPropertyDefinition | "node-string" | "node-number" | "edge-node-id",
     path: Array<string | number>,
   ): string[] {
     const result = leafFilterSchema(property).safeParse(value);
@@ -416,6 +454,11 @@ export class QueryValidator {
     for (const [name, property] of Object.entries(view.properties)) {
       if (isViewPropertyDefinition(property) && property.type.list !== true) {
         shape[name] = SORT_DIRECTION_SCHEMA.optional();
+      }
+    }
+    if (view.usedFor === "edge") {
+      for (const property of EDGE_NODE_ID_PROPERTIES) {
+        shape[property] = SORT_DIRECTION_SCHEMA.optional();
       }
     }
 

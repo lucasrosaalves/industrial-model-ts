@@ -185,6 +185,12 @@ describe("public type contracts", () => {
         // @ts-expect-error list properties are not countable
         aggregates: [{ count: "tags" }],
       });
+
+      // @ts-expect-error edge views are query-only
+      void core.aggregate("Cognite360ImageAnnotation");
+
+      // @ts-expect-error edge views are query-only
+      void core.upsert("Cognite360ImageAnnotation");
     });
   });
 

@@ -27,6 +27,21 @@ const nodeMetadataSchema = {
   _edges: z.record(z.string(), z.unknown()).optional(),
 };
 
+const edgeEndpointSchema = z.object({ space: z.string(), externalId: z.string() });
+
+const edgeMetadataSchema = {
+  instanceType: z.literal("edge").optional(),
+  space: z.string(),
+  externalId: z.string(),
+  version: z.number().optional(),
+  createdTime: z.number().optional(),
+  deletedTime: z.number().optional(),
+  lastUpdatedTime: z.number().optional(),
+  type: edgeEndpointSchema.optional(),
+  startNode: edgeEndpointSchema,
+  endNode: edgeEndpointSchema,
+};
+
 function isListRelation(property: ViewDefinitionProperty): boolean {
   if (isViewPropertyDefinition(property)) {
     return isListDirectRelation(property);
@@ -71,7 +86,9 @@ export class QueryResultValidator {
     remainingDepth: number,
     select?: ResultSelect,
   ): Promise<z.ZodObject<Record<string, z.ZodType>>> {
-    const shape: Record<string, z.ZodType> = { ...nodeMetadataSchema };
+    const shape: Record<string, z.ZodType> = {
+      ...(view.usedFor === "edge" ? edgeMetadataSchema : nodeMetadataSchema),
+    };
     const includeAllProperties = select == null || select._all === true;
 
     for (const [name, property] of Object.entries(view.properties)) {

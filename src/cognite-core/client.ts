@@ -13,6 +13,7 @@ import { COGNITE_CORE_DATA_MODEL } from "./data-model";
 import type {
   CogniteCoreAggregateExecutor,
   CogniteCoreModel,
+  CogniteCoreNodeViewExternalId,
   CogniteCoreQueryExecutor,
   CogniteCoreUpsertExecutor,
   CogniteCoreViewExternalId,
@@ -38,7 +39,7 @@ export class CogniteCoreClient {
     return execute as CogniteCoreQueryExecutor<TView>;
   }
 
-  aggregate<TView extends CogniteCoreViewExternalId>(
+  aggregate<TView extends CogniteCoreNodeViewExternalId>(
     viewExternalId: TView,
   ): CogniteCoreAggregateExecutor<TView> {
     const aggregate = this.model.aggregate<CogniteCoreModel<TView>>();
@@ -50,7 +51,7 @@ export class CogniteCoreClient {
     return execute as unknown as CogniteCoreAggregateExecutor<TView>;
   }
 
-  upsert<TView extends CogniteCoreViewExternalId>(
+  upsert<TView extends CogniteCoreNodeViewExternalId>(
     viewExternalId: TView,
   ): CogniteCoreUpsertExecutor<TView> {
     const upsert = this.model.upsert<CogniteCoreModel<TView>>();

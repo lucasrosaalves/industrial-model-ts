@@ -48,6 +48,12 @@ export class UpsertValidator {
   validate<TModel>(options: UpsertOptions<TModel>, rootView: ViewDefinition): void {
     const errors: string[] = [];
 
+    if (rootView.usedFor === "edge") {
+      throw new Error(
+        `Invalid upsert options:\n- viewExternalId: edge views are query-only; upsert is not supported for "${rootView.externalId}"`,
+      );
+    }
+
     const optionsResult = optionsSchema.safeParse(options);
     if (!optionsResult.success) {
       errors.push(...formatZodIssues(optionsResult.error, []));

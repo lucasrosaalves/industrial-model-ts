@@ -67,6 +67,14 @@ const equipmentView: ViewDefinition = {
   properties: {},
 };
 
+const annotationView: ViewDefinition = {
+  space: "annotation_space",
+  externalId: "ImageAnnotation",
+  version: "1",
+  usedFor: "edge",
+  properties: {},
+};
+
 const assetClassView: ViewDefinition = {
   space: "type_space",
   externalId: "AssetClass",
@@ -105,6 +113,12 @@ describe("parseViews", () => {
       viewSpace: "asset_space",
       viewVersion: "1",
     });
+  });
+
+  it("retains whether a view is edge-backed", () => {
+    const [annotation] = parseViews([annotationView]);
+
+    expect(annotation?.usedFor).toBe("edge");
   });
 
   it("maps scalar, list, direct, reverse, and edge properties", () => {

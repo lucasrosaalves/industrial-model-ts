@@ -1,5 +1,10 @@
 import { describe, expect, expectTypeOf, it } from "vitest";
-import { type IndustrialModel, IndustrialModelClient, type NodeId } from "../src/index.js";
+import {
+  type IndustrialModel,
+  IndustrialModelClient,
+  type NodeId,
+  type QueryOptions,
+} from "../src/index.js";
 import {
   COGNITE_CORE_DATA_MODEL,
   makeCogniteAssetQueryResult,
@@ -23,7 +28,73 @@ type CogniteAsset = IndustrialModel<
   }
 >;
 
+type ImageAnnotation = IndustrialModel<
+  {
+    confidence?: number;
+    polygon?: number[];
+  },
+  object,
+  "edge"
+>;
+
+type PlainModel = { name: string };
+
 describe("query typing", () => {
+  it("includes edge metadata and accepts edge identity inputs", async () => {
+    const model = new IndustrialModelClient(
+      makeCogniteClientMock({
+        queryItems: { Cognite360ImageAnnotation: [] },
+      }),
+      COGNITE_CORE_DATA_MODEL,
+    );
+
+    const { items } = await model.query<ImageAnnotation>()({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { confidence: true, polygon: true },
+      filters: {
+        startNode: { eq: { space: "object-space", externalId: "object-1" } },
+        endNode: { in: [{ space: "image-space", externalId: "image-1" }] },
+        type: { exists: true },
+      },
+      sort: { startNode: "ascending", endNode: "descending", type: "ascending" },
+    });
+
+    type Item = (typeof items)[number];
+    expectTypeOf<Item["startNode"]>().toEqualTypeOf<NodeId>();
+    expectTypeOf<Item["endNode"]>().toEqualTypeOf<NodeId>();
+    expectTypeOf<Item["type"]>().toEqualTypeOf<NodeId | undefined>();
+    expectTypeOf<Item["confidence"]>().toEqualTypeOf<number | undefined>();
+    expectTypeOf<Item["polygon"]>().toEqualTypeOf<number[] | undefined>();
+    // @ts-expect-error name was not selected.
+    items[0]?.name;
+  });
+
+  it("keeps unbranded and node models free of edge metadata and inputs", async () => {
+    const model = new IndustrialModelClient(
+      makeCogniteClientMock({
+        queryItems: { CogniteAsset: [] },
+      }),
+      COGNITE_CORE_DATA_MODEL,
+    );
+
+    const { items } = await model.query<PlainModel>()({
+      viewExternalId: "CogniteAsset",
+      select: { name: true },
+    });
+
+    type Item = (typeof items)[number];
+    expectTypeOf<"startNode" extends keyof Item ? true : false>().toEqualTypeOf<false>();
+
+    const invalidNodeFilter = {
+      viewExternalId: "CogniteAsset",
+      filters: {
+        // @ts-expect-error edge identity filters are unavailable on node models.
+        startNode: {},
+      },
+    } as const satisfies QueryOptions<CogniteAsset>;
+    void invalidNodeFilter;
+  });
+
   it("infers nested relation fields from the select tree", async () => {
     const client = makeCogniteClientMock({
       queryItems: makeCogniteAssetQueryResult(),

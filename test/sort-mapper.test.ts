@@ -3,6 +3,7 @@ import { SortMapper } from "../src/mappers/sort-mapper";
 import { getCogniteCoreView } from "./fixtures/index.js";
 
 const ASSET_VIEW = getCogniteCoreView("CogniteAsset");
+const ANNOTATION_VIEW = getCogniteCoreView("Cognite360ImageAnnotation");
 
 describe("SortMapper", () => {
   const mapper = new SortMapper();
@@ -42,6 +43,20 @@ describe("SortMapper", () => {
         direction: "descending",
         nullsFirst: true,
       },
+    ]);
+  });
+
+  it("maps root edge intrinsic properties", () => {
+    const result = mapper.map(
+      { startNode: "ascending", endNode: "descending", type: "ascending" },
+      ANNOTATION_VIEW,
+      "edge",
+    );
+
+    expect(result).toEqual([
+      { property: ["edge", "startNode"], direction: "ascending", nullsFirst: false },
+      { property: ["edge", "endNode"], direction: "descending", nullsFirst: true },
+      { property: ["edge", "type"], direction: "ascending", nullsFirst: false },
     ]);
   });
 });

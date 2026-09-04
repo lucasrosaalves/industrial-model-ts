@@ -70,6 +70,16 @@ export type CogniteCoreViewExternalId =
   | "CogniteUnit"
   | "CogniteVisualizable";
 
+export type CogniteCoreEdgeViewExternalId =
+  | "Cognite360ImageAnnotation"
+  | "CogniteAnnotation"
+  | "CogniteDiagramAnnotation";
+
+export type CogniteCoreNodeViewExternalId = Exclude<
+  CogniteCoreViewExternalId,
+  CogniteCoreEdgeViewExternalId
+>;
+
 export type Cognite360Image = IndustrialModel<
   {
     translationX?: number;
@@ -123,7 +133,8 @@ export type Cognite360ImageAnnotation = IndustrialModel<
   },
   {
     source?: CogniteSourceSystem;
-  }
+  },
+  "edge"
 >;
 
 export type Cognite360ImageCollection = IndustrialModel<
@@ -272,7 +283,8 @@ export type CogniteAnnotation = IndustrialModel<
   },
   {
     source?: CogniteSourceSystem;
-  }
+  },
+  "edge"
 >;
 
 export type CogniteAsset = IndustrialModel<
@@ -437,7 +449,8 @@ export type CogniteDiagramAnnotation = IndustrialModel<
   },
   {
     source?: CogniteSourceSystem;
-  }
+  },
+  "edge"
 >;
 
 export type CogniteEquipment = IndustrialModel<
@@ -699,7 +712,7 @@ export type CogniteCoreQueryExecutor<TView extends CogniteCoreViewExternalId> = 
   ): Promise<QueryResult<QueryResultItem<CogniteCoreModel<TView>, undefined>>>;
 };
 
-export type CogniteCoreAggregateExecutor<TView extends CogniteCoreViewExternalId> = <
+export type CogniteCoreAggregateExecutor<TView extends CogniteCoreNodeViewExternalId> = <
   const TOptions extends Omit<AggregateOptions<CogniteCoreModel<TView>>, "viewExternalId">,
 >(
   options?: TOptions,
@@ -709,6 +722,6 @@ export type CogniteCoreAggregateExecutor<TView extends CogniteCoreViewExternalId
   >
 >;
 
-export type CogniteCoreUpsertExecutor<TView extends CogniteCoreViewExternalId> = (
+export type CogniteCoreUpsertExecutor<TView extends CogniteCoreNodeViewExternalId> = (
   options: Omit<UpsertOptions<CogniteCoreModel<TView>>, "viewExternalId">,
 ) => Promise<UpsertResult>;

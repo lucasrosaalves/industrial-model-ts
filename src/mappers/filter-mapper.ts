@@ -56,7 +56,11 @@ export class FilterMapper {
         result.push({ not: await this.whereInputToSingle(combined, rootView) });
       } else {
         const filterValue = value as Record<string, unknown>;
-        const property = getPropertyRef(key, rootView);
+        const property = getPropertyRef(
+          key,
+          rootView,
+          rootView.usedFor === "edge" ? "edge" : "node",
+        );
         const hasLeafFilter = isLeafFilter(filterValue);
         if (hasLeafFilter) {
           result.push(...this.leafToFilterDefs(property, filterValue));
@@ -91,7 +95,7 @@ export class FilterMapper {
     const response = await this.cognite.searchInstances({
       view: toViewReference(rootView),
       query: search.query,
-      instanceType: "node",
+      instanceType: rootView.usedFor === "edge" ? "edge" : "node",
       properties: [propertyName],
       operator: search.operator ?? "OR",
       limit: 1_000,

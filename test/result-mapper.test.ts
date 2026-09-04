@@ -26,6 +26,68 @@ describe("QueryResultMapper", () => {
     });
   });
 
+  it("maps root edges with properties from an edge view", async () => {
+    const result = await mapper.mapNodes("Cognite360ImageAnnotation", {
+      Cognite360ImageAnnotation: [
+        {
+          instanceType: "edge",
+          space: "annotation-space",
+          externalId: "annotation-1",
+          startNode: { space: "object-space", externalId: "object-1" },
+          endNode: { space: "image-space", externalId: "image-1" },
+          properties: {
+            cdf_cdm: {
+              "Cognite360ImageAnnotation/v1": {
+                confidence: 0.92,
+                polygon: [0.1, 0.2, 0.3, 0.4],
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    expect(result).toEqual([
+      {
+        instanceType: "edge",
+        space: "annotation-space",
+        externalId: "annotation-1",
+        startNode: { space: "object-space", externalId: "object-1" },
+        endNode: { space: "image-space", externalId: "image-1" },
+        confidence: 0.92,
+        polygon: [0.1, 0.2, 0.3, 0.4],
+      },
+    ]);
+  });
+
+  it("coerces Cognite timestamp properties on edge views to Date", async () => {
+    const result = await mapper.mapNodes("Cognite360ImageAnnotation", {
+      Cognite360ImageAnnotation: [
+        {
+          instanceType: "edge",
+          space: "annotation-space",
+          externalId: "annotation-1",
+          startNode: { space: "object-space", externalId: "object-1" },
+          endNode: { space: "image-space", externalId: "image-1" },
+          properties: {
+            cdf_cdm: {
+              "Cognite360ImageAnnotation/v1": {
+                sourceCreatedTime: "2024-01-02T03:04:05.000Z",
+                formatVersion: "1",
+              },
+            },
+          },
+        },
+      ],
+    });
+
+    const item = result[0];
+    expect(item).toBeDefined();
+    expect(item?.sourceCreatedTime).toBeInstanceOf(Date);
+    expect((item?.sourceCreatedTime as Date).toISOString()).toBe("2024-01-02T03:04:05.000Z");
+    expect(item?.formatVersion).toBe("1");
+  });
+
   it("coerces Cognite timestamp properties to Date", async () => {
     const result = await mapper.mapNodes(
       "CogniteAsset",

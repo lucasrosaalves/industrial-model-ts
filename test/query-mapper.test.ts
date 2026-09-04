@@ -80,6 +80,191 @@ describe("QueryMapper", () => {
     });
   });
 
+  it("builds a root edges query for edge-backed views", async () => {
+    const query = await mapper.map<{ confidence?: number; polygon?: number[] }>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { confidence: true, polygon: true },
+      limit: 10,
+    });
+
+    expect(query.with.Cognite360ImageAnnotation).toEqual({
+      edges: {
+        filter: {
+          and: [
+            {
+              hasData: [
+                {
+                  type: "view",
+                  space: "cdf_cdm",
+                  externalId: "Cognite360ImageAnnotation",
+                  version: "v1",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      sort: [],
+      limit: 10,
+    });
+    expect(query.select.Cognite360ImageAnnotation).toEqual({
+      sources: [
+        {
+          source: {
+            type: "view",
+            space: "cdf_cdm",
+            externalId: "Cognite360ImageAnnotation",
+            version: "v1",
+          },
+          properties: ["confidence", "polygon"],
+        },
+      ],
+    });
+  });
+
+  it("maps scalar filters and sorts on root edge views", async () => {
+    const query = await mapper.map<{ confidence?: number }>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      filters: { confidence: { gte: 0.8 } },
+      sort: { confidence: "descending" },
+    });
+
+    expect(query.with.Cognite360ImageAnnotation).toEqual({
+      edges: {
+        filter: {
+          and: [
+            {
+              hasData: [
+                {
+                  type: "view",
+                  space: "cdf_cdm",
+                  externalId: "Cognite360ImageAnnotation",
+                  version: "v1",
+                },
+              ],
+            },
+            {
+              range: {
+                property: ["cdf_cdm", "Cognite360ImageAnnotation/v1", "confidence"],
+                gte: 0.8,
+              },
+            },
+          ],
+        },
+      },
+      sort: [
+        {
+          property: ["cdf_cdm", "Cognite360ImageAnnotation/v1", "confidence"],
+          direction: "descending",
+          nullsFirst: true,
+        },
+      ],
+      limit: 1_000,
+    });
+  });
+
+  it("maps edge endpoints and type as intrinsic edge filters and sorts", async () => {
+    const startNode = { space: "object-space", externalId: "object-1" };
+    const endNode = { space: "image-space", externalId: "image-1" };
+    const edgeType = { space: "cdf_cdm", externalId: "image-360-annotation" };
+
+    const query = await mapper.map<IndustrialModel<{ value?: never }, object, "edge">>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      filters: {
+        startNode: { eq: startNode },
+        endNode: { in: [endNode] },
+        type: { eq: edgeType },
+      },
+      sort: { endNode: "ascending", type: "descending" },
+    });
+
+    expect(query.with.Cognite360ImageAnnotation).toMatchObject({
+      edges: {
+        filter: {
+          and: expect.arrayContaining([
+            { equals: { property: ["edge", "startNode"], value: startNode } },
+            { in: { property: ["edge", "endNode"], values: [endNode] } },
+            { equals: { property: ["edge", "type"], value: edgeType } },
+          ]),
+        },
+      },
+      sort: [
+        { property: ["edge", "endNode"], direction: "ascending", nullsFirst: false },
+        { property: ["edge", "type"], direction: "descending", nullsFirst: true },
+      ],
+    });
+  });
+
+  it("maps text search filters on edge views with instanceType edge", async () => {
+    const cognite = makeCogniteMock();
+    cognite.searchInstances = vi.fn().mockResolvedValue({
+      items: [{ instanceType: "edge", space: "annotation-space", externalId: "annotation-1" }],
+    });
+    const searchMapper = new QueryMapper(createViewMapper(), cognite);
+
+    const query = await searchMapper.map<{ name?: string }>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { name: true },
+      filters: { name: { search: { query: "weld", operator: "AND" } } },
+    });
+
+    expect(cognite.searchInstances).toHaveBeenCalledWith(
+      expect.objectContaining({
+        query: "weld",
+        operator: "AND",
+        properties: ["name"],
+        instanceType: "edge",
+      }),
+    );
+    const rootWith = query.with.Cognite360ImageAnnotation as {
+      edges: { filter: { and: unknown[] } };
+    };
+    expect(rootWith.edges.filter.and).toContainEqual({
+      instanceReferences: [{ space: "annotation-space", externalId: "annotation-1" }],
+    });
+  });
+
+  it("selects all scalar properties with _all on root edge views", async () => {
+    const query = await mapper.map({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { _all: true },
+      limit: 5,
+    });
+
+    const rootSelect = query.select.Cognite360ImageAnnotation as {
+      sources: { properties: string[] }[];
+    };
+    const properties = rootSelect.sources[0]?.properties ?? [];
+
+    expect(properties).toContain("confidence");
+    expect(properties).toContain("polygon");
+    expect(properties).toContain("formatVersion");
+    expect(properties).toContain("name");
+    expect(properties).toContain("source");
+    expect(query.with.Cognite360ImageAnnotation).toMatchObject({ limit: 5 });
+    expect(query.with["Cognite360ImageAnnotation|source"]).toBeUndefined();
+  });
+
+  it("uses Cognite's max root limit when auto-paginating edge views", async () => {
+    const query = await mapper.map<{ confidence?: number }>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { confidence: true },
+      limit: -1,
+    });
+
+    expect(query.with.Cognite360ImageAnnotation).toMatchObject({ limit: 10_000 });
+  });
+
+  it("passes cursor on the root edge table expression", async () => {
+    const query = await mapper.map<{ confidence?: number }>({
+      viewExternalId: "Cognite360ImageAnnotation",
+      select: { confidence: true },
+      cursor: "edge-cursor-1",
+    });
+
+    expect(query.cursors).toEqual({ Cognite360ImageAnnotation: "edge-cursor-1" });
+  });
+
   it("uses Cognite's max root limit when auto-paginating all pages", async () => {
     const query = await mapper.map<{ name: string }>({
       viewExternalId: "CogniteAsset",
@@ -296,6 +481,15 @@ describe("QueryMapper", () => {
       ).rejects.toThrow(/select\.parent: Unrecognized key: "namme"/);
     });
 
+    it("rejects relation traversal from an edge-backed root view", async () => {
+      await expect(
+        mapper.map({
+          viewExternalId: "Cognite360ImageAnnotation",
+          select: { source: { name: true } } as never,
+        }),
+      ).rejects.toThrow(/relation traversal from edge views is not supported/);
+    });
+
     it("rejects unknown filter properties", async () => {
       await expect(
         mapper.map<Asset>({
@@ -303,6 +497,31 @@ describe("QueryMapper", () => {
           filters: { namme: { eq: "Pump" } } as never,
         }),
       ).rejects.toThrow(/filters: Unrecognized key: "namme"/);
+    });
+
+    it("rejects edge intrinsic filters and sorts on node views", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          filters: { startNode: { eq: { space: "asset-space", externalId: "asset-1" } } } as never,
+        }),
+      ).rejects.toThrow(/filters: Unrecognized key: "startNode"/);
+
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          sort: { endNode: "ascending" } as never,
+        }),
+      ).rejects.toThrow(/sort: Unrecognized key: "endNode"/);
+    });
+
+    it("rejects invalid edge intrinsic filter operators", async () => {
+      await expect(
+        mapper.map({
+          viewExternalId: "Cognite360ImageAnnotation",
+          filters: { startNode: { prefix: "object" } } as never,
+        }),
+      ).rejects.toThrow(/filters\.startNode: Unrecognized key: "prefix"/);
     });
 
     it("rejects filter operators that do not match the view property type", async () => {
