@@ -66,10 +66,7 @@ export class IndustrialModelClient {
   ) {
     const cognite = createCogniteAdapter(client);
     this.cognite = cognite;
-    const viewMapper = new ViewMapper(cognite, dataModelId, {
-      ...(options.cache !== undefined ? { cache: options.cache } : {}),
-      ...(options.cacheTtlMs !== undefined ? { cacheTtlMs: options.cacheTtlMs } : {}),
-    });
+    const viewMapper = options.viewMapperCache ?? new ViewMapper(cognite, dataModelId);
     this.queryMapper = new QueryMapper(viewMapper, cognite);
     this.aggregateMapper = new AggregateMapper(viewMapper, cognite);
     this.upsertMapper = new UpsertMapper(viewMapper, cognite);

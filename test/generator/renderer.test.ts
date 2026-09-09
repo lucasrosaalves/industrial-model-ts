@@ -4,7 +4,11 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { JsonTypesConfig } from "../../src/cli/generator/json-types-parser";
 import type { ViewDefinition } from "../../src/cli/generator/models";
-import { type GeneratorConfig, generateFromDefinitions } from "../../src/cli/generator/renderer";
+import {
+  type GeneratorConfig,
+  generate,
+  generateFromDefinitions,
+} from "../../src/cli/generator/renderer";
 
 const viewDefinitions: ViewDefinition[] = [
   {
@@ -29,6 +33,7 @@ function makeConfig(): GeneratorConfig {
     outputPath,
     packageVersion: "0.2.0",
     generatedAt: "2026-01-01T00:00:00.000Z",
+    viewMapperCache: true,
   };
 }
 
@@ -50,6 +55,7 @@ describe("generateFromDefinitions", () => {
     expect(existsSync(join(outputDir, "client.ts"))).toBe(true);
     expect(existsSync(join(outputDir, "index.ts"))).toBe(true);
     expect(existsSync(join(outputDir, "models.ts"))).toBe(false);
+    expect(existsSync(join(outputDir, "view-mapper.ts"))).toBe(false);
   });
 
   it("includes custom type declarations in generated types.ts", () => {
@@ -104,5 +110,59 @@ describe("generateFromDefinitions", () => {
     );
     expect(typesContent).toContain("metadata?: SensorMetadata");
     expect(typesContent).not.toContain("unknown");
+  });
+});
+
+const cacheViews = [
+  {
+    space: "target_space",
+    externalId: "Equipment",
+    version: "1",
+    properties: {
+      name: {
+        container: {},
+        containerPropertyIdentifier: "name",
+        type: { type: "text" as const },
+      },
+    },
+  },
+];
+
+describe("generate", () => {
+  afterEach(() => {
+    if (outputPath) {
+      rmSync(outputPath, { recursive: true, force: true });
+      outputPath = null;
+    }
+  });
+
+  it("embeds a ViewMapperCache by default", () => {
+    const config = makeConfig();
+
+    generate(cacheViews, config);
+
+    const outputDir = join(config.outputPath, config.dataModelId);
+    expect(existsSync(join(outputDir, "view-mapper.ts"))).toBe(true);
+    const viewMapper = readFileSync(join(outputDir, "view-mapper.ts"), "utf-8");
+    expect(viewMapper).toContain("ViewMapperCache.fromViews");
+    expect(viewMapper).toContain('"externalId": "Equipment"');
+    const client = readFileSync(join(outputDir, "client.ts"), "utf-8");
+    expect(client).toContain('import { VIEW_MAPPER_CACHE } from "./view-mapper";');
+    expect(client).toContain("viewMapperCache: VIEW_MAPPER_CACHE");
+    const index = readFileSync(join(outputDir, "index.ts"), "utf-8");
+    expect(index).toContain('export { VIEW_MAPPER_CACHE } from "./view-mapper";');
+  });
+
+  it("skips ViewMapperCache when viewMapperCache is false", () => {
+    const config = { ...makeConfig(), viewMapperCache: false };
+
+    generate(cacheViews, config);
+
+    const outputDir = join(config.outputPath, config.dataModelId);
+    expect(existsSync(join(outputDir, "view-mapper.ts"))).toBe(false);
+    const client = readFileSync(join(outputDir, "client.ts"), "utf-8");
+    expect(client).not.toContain("VIEW_MAPPER_CACHE");
+    const index = readFileSync(join(outputDir, "index.ts"), "utf-8");
+    expect(index).not.toContain("VIEW_MAPPER_CACHE");
   });
 });

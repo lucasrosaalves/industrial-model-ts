@@ -1,5 +1,5 @@
 /**
- * Generate in-repo Cognite Core types from a view fixture.
+ * Generate in-repo Cognite Core types and `ViewMapperCache` from a view fixture.
  *
  * `src/cognite-core/client.ts` is hand-maintained (custom data-model constant and
  * datapoints) and must not be overwritten by the CLI client template.
@@ -10,6 +10,7 @@ import { COGNITE_CORE_DATA_MODEL } from "../../cognite-core/data-model";
 import { parseViews } from "./parser";
 import { createGeneratorConfig, type GeneratorConfig } from "./renderer";
 import { renderTypes } from "./templates/types";
+import { renderViewMapperCache } from "./templates/view-mapper";
 
 export function createCogniteCoreGeneratorConfig(): GeneratorConfig {
   return {
@@ -22,6 +23,7 @@ export function createCogniteCoreGeneratorConfig(): GeneratorConfig {
       packageVersion: "",
     }),
     typesModule: "../types",
+    runtimeModule: "../mappers/view-mapper",
     omitGeneratedAt: true,
     omitPackageVersion: true,
   };
@@ -29,4 +31,8 @@ export function createCogniteCoreGeneratorConfig(): GeneratorConfig {
 
 export function renderCogniteCoreTypes(views: CogniteViewDefinition[]): string {
   return renderTypes(parseViews(views), createCogniteCoreGeneratorConfig());
+}
+
+export function renderCogniteCoreViewMapper(views: CogniteViewDefinition[]): string {
+  return renderViewMapperCache(views, createCogniteCoreGeneratorConfig());
 }

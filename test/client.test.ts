@@ -1,10 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryCacheAdapter } from "../src/cache/index.js";
 import type { NodeDefinition } from "../src/cognite/index.js";
-import { type IndustrialModel, IndustrialModelClient, type NodeId } from "../src/index.js";
+import {
+  type IndustrialModel,
+  IndustrialModelClient,
+  type NodeId,
+  ViewMapperCache,
+} from "../src/index.js";
 import type { AggregateDefinition } from "../src/types.js";
 import {
   COGNITE_CORE_DATA_MODEL,
+  getCogniteCoreViews,
   makeCogniteAssetAggregateByNameResponse,
   makeCogniteAssetCountByNameResponse,
   makeCogniteAssetDistinctSourceIdsResponse,
@@ -1234,28 +1239,25 @@ describe("IndustrialModelClient", () => {
     ).rejects.toThrow(/Invalid query result/);
   });
 
-  it("shares a schema cache across separate client instances via the cache option", async () => {
-    const cache = createMemoryCacheAdapter();
-
-    const firstClient = makeCogniteClientMock({ queryItems: makeCogniteAssetQueryResult() });
-    const firstModel = new IndustrialModelClient(firstClient, COGNITE_CORE_DATA_MODEL, { cache });
-    await firstModel.query<IndustrialModel<{ name: string }>>()({
-      viewExternalId: "CogniteAsset",
-      select: { name: true },
-      limit: 10,
+  it("uses a ViewMapperCache instead of fetching views from CDF", async () => {
+    const client = makeCogniteClientMock({
+      queryItems: makeCogniteAssetQueryResult(),
     });
-    expect(firstClient.dataModels.retrieve).toHaveBeenCalledOnce();
-
-    const secondClient = makeCogniteClientMock({ queryItems: makeCogniteAssetQueryResult() });
-    const secondModel = new IndustrialModelClient(secondClient, COGNITE_CORE_DATA_MODEL, {
-      cache,
+    const model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, {
+      viewMapperCache: new ViewMapperCache(getCogniteCoreViews()),
     });
-    await secondModel.query<IndustrialModel<{ name: string }>>()({
+
+    const { items } = await model.query<IndustrialModel<{ name: string }>>()({
       viewExternalId: "CogniteAsset",
       select: { name: true },
       limit: 10,
     });
 
-    expect(secondClient.dataModels.retrieve).not.toHaveBeenCalled();
+    expect(client.dataModels.retrieve).not.toHaveBeenCalled();
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      externalId: "root-asset",
+      name: "Root Asset",
+    });
   });
 });

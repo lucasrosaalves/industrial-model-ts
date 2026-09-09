@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
-import { createMemoryCacheAdapter } from "../src/cache/adapters/memory-adapter";
 import type { CognitePort, ViewDefinition } from "../src/cognite";
-import { ViewMapper } from "../src/mappers/view-mapper";
+import { ViewMapper, ViewMapperCache } from "../src/mappers/view-mapper";
 import { createViewMapper, getCogniteCoreView, makeCogniteWithViews } from "./fixtures/index.js";
 
 function makeViewWithDirectRelation(externalId: string, relatedExternalId: string): ViewDefinition {
@@ -201,42 +200,34 @@ describe("ViewMapper", () => {
     await mapper.getView("ViewC");
     expect(retrieveViews.mock.calls).toHaveLength(2);
   });
+});
 
-  describe("with a cache adapter", () => {
-    it("reuses views persisted by another ViewMapper instance sharing the same adapter", async () => {
-      const cache = createMemoryCacheAdapter();
-      const cognite = makeCognite([makeView("ViewA")]);
-      const retrieve = cognite.retrieveDataModels as ReturnType<typeof vi.fn>;
+describe("ViewMapperCache", () => {
+  it("returns preloaded views", async () => {
+    const cache = new ViewMapperCache([makeView("ViewA"), makeView("ViewB")]);
 
-      const first = new ViewMapper(cognite, DATA_MODEL, { cache });
-      await first.getViews();
+    expect((await cache.getView("ViewA")).externalId).toBe("ViewA");
+    expect((await cache.getViews()).map((view) => view.externalId)).toEqual(["ViewA", "ViewB"]);
+  });
 
-      const second = new ViewMapper(cognite, DATA_MODEL, { cache });
-      const view = await second.getView("ViewA");
+  it("throws when the requested view is not in the cache", async () => {
+    const cache = new ViewMapperCache([makeView("ViewA")]);
+    await expect(cache.getView("Missing")).rejects.toThrow(
+      'View "Missing" is not available in data model',
+    );
+  });
 
-      expect(view.externalId).toBe("ViewA");
-      expect(retrieve.mock.calls).toHaveLength(1);
-    });
+  it("round-trips dumped views through fromViews", async () => {
+    const view = makeViewWithDirectRelation("MainView", "DepView");
+    const cache = ViewMapperCache.fromViews([view]);
+    const loaded = await cache.getView("MainView");
 
-    it("re-fetches once the cached entry is older than cacheTtlMs", async () => {
-      vi.useFakeTimers();
-      try {
-        const cache = createMemoryCacheAdapter();
-        const cognite = makeCognite([makeView("ViewA")]);
-        const retrieve = cognite.retrieveDataModels as ReturnType<typeof vi.fn>;
+    expect(loaded.externalId).toBe("MainView");
+    expect(loaded.properties.related).toBeDefined();
+  });
 
-        const first = new ViewMapper(cognite, DATA_MODEL, { cache, cacheTtlMs: 1000 });
-        await first.getViews();
-
-        vi.advanceTimersByTime(1001);
-
-        const second = new ViewMapper(cognite, DATA_MODEL, { cache, cacheTtlMs: 1000 });
-        await second.getViews();
-
-        expect(retrieve.mock.calls).toHaveLength(2);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
+  it("is a ViewMapper", () => {
+    const cache = new ViewMapperCache([makeView("ViewA")]);
+    expect(cache).toBeInstanceOf(ViewMapper);
   });
 });

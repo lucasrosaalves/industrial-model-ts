@@ -69,9 +69,7 @@ describe("Cognite Core module", () => {
       limit: 10,
     });
 
-    expect(client.dataModels.retrieve).toHaveBeenCalledWith([COGNITE_CORE_DATA_MODEL], {
-      inlineViews: true,
-    });
+    expect(client.dataModels.retrieve).not.toHaveBeenCalled();
     expect(client.instances.query).toHaveBeenCalledWith(
       expect.objectContaining({
         with: expect.objectContaining({

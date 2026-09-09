@@ -18,12 +18,16 @@ import type {
   CogniteCoreUpsertExecutor,
   CogniteCoreViewExternalId,
 } from "./types";
+import { VIEW_MAPPER_CACHE } from "./view-mapper";
 
 export class CogniteCoreClient {
   private readonly model: IndustrialModelClient;
 
   constructor(client: CogniteClient, options: IndustrialModelClientOptions = {}) {
-    this.model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, options);
+    this.model = new IndustrialModelClient(client, COGNITE_CORE_DATA_MODEL, {
+      ...options,
+      viewMapperCache: VIEW_MAPPER_CACHE,
+    });
   }
 
   query<TView extends CogniteCoreViewExternalId>(

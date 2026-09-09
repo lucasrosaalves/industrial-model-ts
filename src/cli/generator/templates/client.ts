@@ -34,6 +34,16 @@ export function renderClient(views: ViewDefinition[], config: GeneratorConfig): 
     })
     .join("\n");
 
+  const viewMapperImport = config.viewMapperCache
+    ? `import { VIEW_MAPPER_CACHE } from "./view-mapper";\n`
+    : "";
+  const clientOptions = config.viewMapperCache
+    ? `{
+      ...options,
+      viewMapperCache: VIEW_MAPPER_CACHE,
+    }`
+    : "options";
+
   return `${renderHeader(config)}
 
 import type { CogniteClient } from "@cognite/sdk";
@@ -47,7 +57,7 @@ import {
   type QueryOptions,
   type UpsertOptions,
 } from "industrial-model";
-import type {
+${viewMapperImport}import type {
 ${imports}
 } from "./types";
 
@@ -61,7 +71,7 @@ export class ${config.clientName}Client {
   private readonly model: IndustrialModelClient;
 
   constructor(client: CogniteClient, options: IndustrialModelClientOptions = {}) {
-    this.model = new IndustrialModelClient(client, DATA_MODEL, options);
+    this.model = new IndustrialModelClient(client, DATA_MODEL, ${clientOptions});
   }
 
   query<TView extends ${config.clientName}ViewExternalId>(

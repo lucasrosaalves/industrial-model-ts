@@ -2,11 +2,15 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { renderCogniteCoreTypes } from "../../src/cli/generator/cognite-core.js";
+import {
+  renderCogniteCoreTypes,
+  renderCogniteCoreViewMapper,
+} from "../../src/cli/generator/cognite-core.js";
 import { getCogniteCoreViews } from "../fixtures/index.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const typesPath = join(root, "src/cognite-core/types.ts");
+const viewMapperPath = join(root, "src/cognite-core/view-mapper.ts");
 
 function typeSection(source: string, typeName: string): string {
   const start = source.indexOf(`export type ${typeName} =`);
@@ -22,6 +26,21 @@ describe("Cognite Core type generation", () => {
     const expected = renderCogniteCoreTypes(getCogniteCoreViews());
     const actual = readFileSync(typesPath, "utf8");
     expect(actual).toBe(expected);
+  });
+
+  it("matches the committed src/cognite-core/view-mapper.ts", () => {
+    const expected = renderCogniteCoreViewMapper(getCogniteCoreViews());
+    const actual = readFileSync(viewMapperPath, "utf8");
+    expect(actual).toBe(expected);
+  });
+
+  it("imports ViewMapperCache from the in-package module", () => {
+    const output = renderCogniteCoreViewMapper(getCogniteCoreViews());
+
+    expect(output).toContain('from "../mappers/view-mapper"');
+    expect(output).toContain("export const VIEW_MAPPER_CACHE");
+    expect(output).not.toContain("Generated at:");
+    expect(output).not.toContain("industrial-model v");
   });
 
   it("omits inward list reverse relations that Cognite cannot traverse", () => {

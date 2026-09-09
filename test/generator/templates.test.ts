@@ -4,6 +4,7 @@ import type { GeneratorConfig } from "../../src/cli/generator/renderer";
 import { renderClient } from "../../src/cli/generator/templates/client";
 import { renderIndex } from "../../src/cli/generator/templates/index";
 import { renderTypes } from "../../src/cli/generator/templates/types";
+import { renderViewMapperCache } from "../../src/cli/generator/templates/view-mapper";
 
 const mockViews: ViewDefinition[] = [
   {
@@ -186,6 +187,7 @@ const mockConfig: GeneratorConfig = {
   outputPath: "./generated",
   packageVersion: "0.2.0",
   generatedAt: "2026-01-01T00:00:00.000Z",
+  viewMapperCache: true,
 };
 
 describe("renderTypes", () => {
@@ -348,9 +350,26 @@ describe("renderClient", () => {
 
     expect(output).toContain('from "industrial-model";');
     expect(output).toContain('} from "./types";');
+    expect(output).toContain('from "./view-mapper";');
     expect(output).toContain("MyDataModelNodeViewExternalId,");
     expect(output).not.toContain('from "../');
     expect(output).not.toContain('from "./models"');
+  });
+
+  it("passes VIEW_MAPPER_CACHE into IndustrialModelClient", () => {
+    const output = renderClient(mockViews, mockConfig);
+
+    expect(output).toContain('import { VIEW_MAPPER_CACHE } from "./view-mapper";');
+    expect(output).toContain("viewMapperCache: VIEW_MAPPER_CACHE");
+  });
+
+  it("omits VIEW_MAPPER_CACHE when viewMapperCache is disabled", () => {
+    const output = renderClient(mockViews, { ...mockConfig, viewMapperCache: false });
+
+    expect(output).not.toContain("VIEW_MAPPER_CACHE");
+    expect(output).toContain(
+      "this.model = new IndustrialModelClient(client, DATA_MODEL, options);",
+    );
   });
 
   it("generates a factory with per-view operation shortcuts backed by the generated client", () => {
@@ -404,7 +423,61 @@ describe("renderIndex", () => {
     expect(output).toContain(
       'export { DATA_MODEL, MyDataModelClient, createMyDataModelClient } from "./client";',
     );
+    expect(output).toContain('export { VIEW_MAPPER_CACHE } from "./view-mapper";');
     expect(output).toContain('export type * from "./types";');
     expect(output).not.toContain("./models");
+  });
+
+  it("omits VIEW_MAPPER_CACHE when viewMapperCache is disabled", () => {
+    const output = renderIndex({ ...mockConfig, viewMapperCache: false });
+
+    expect(output).not.toContain("VIEW_MAPPER_CACHE");
+    expect(output).not.toContain("./view-mapper");
+  });
+});
+
+describe("renderViewMapperCache", () => {
+  it("embeds dumped views in a ViewMapperCache", () => {
+    const output = renderViewMapperCache(
+      [
+        {
+          space: "target_space",
+          externalId: "Equipment",
+          version: "1",
+          properties: {
+            name: {
+              container: {},
+              containerPropertyIdentifier: "name",
+              type: { type: "text" },
+            },
+          },
+        },
+      ],
+      mockConfig,
+    );
+
+    expect(output).toContain('import { ViewMapperCache } from "industrial-model";');
+    expect(output).toContain(
+      "export const VIEW_MAPPER_CACHE = ViewMapperCache.fromViews(VIEW_DUMPS);",
+    );
+    expect(output).toContain('"externalId": "Equipment"');
+    expect(output).toContain('"space": "target_space"');
+  });
+
+  it("imports ViewMapperCache from a custom runtime module", () => {
+    const output = renderViewMapperCache(
+      [
+        {
+          space: "target_space",
+          externalId: "Equipment",
+          version: "1",
+          properties: {},
+        },
+      ],
+      { ...mockConfig, runtimeModule: "../mappers/view-mapper" },
+    );
+
+    expect(output).toContain('from "../mappers/view-mapper"');
+    expect(output).not.toContain('from "industrial-model"');
   });
 });

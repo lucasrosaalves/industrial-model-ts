@@ -1,4 +1,4 @@
-import { type CachePort, type CacheResolver, createCacheResolver } from "../cache";
+import { type CacheResolver, createCacheResolver } from "../cache";
 import type {
   CognitePort,
   ViewDefinition,
@@ -13,22 +13,14 @@ import {
   isViewPropertyDefinition,
 } from "../utils/view";
 
-export type ViewMapperOptions = {
-  cache?: CachePort;
-  cacheTtlMs?: number;
-};
-
 export class ViewMapper {
   private readonly resolver: CacheResolver<Map<string, ViewDefinition>>;
 
   constructor(
     private readonly cognite: CognitePort,
     private readonly dataModelId: DataModelId,
-    options: ViewMapperOptions = {},
   ) {
     this.resolver = createCacheResolver<Map<string, ViewDefinition>>({
-      ...(options.cache !== undefined ? { adapter: options.cache } : {}),
-      ...(options.cacheTtlMs !== undefined ? { ttlMs: options.cacheTtlMs } : {}),
       serialize: (views) => Array.from(views.values()),
       deserialize: (json) => {
         const views = json as ViewDefinition[];
@@ -38,14 +30,7 @@ export class ViewMapper {
   }
 
   async getView(externalId: string): Promise<ViewDefinition> {
-    const views = await this.loadViews();
-    const view = views.get(externalId);
-    if (!view) {
-      throw new Error(
-        `View "${externalId}" not found in data model "${this.dataModelId.externalId}"`,
-      );
-    }
-    return view;
+    return requireView(await this.loadViews(), externalId, this.dataModelId);
   }
 
   async getViews(): Promise<ViewDefinition[]> {
@@ -53,7 +38,7 @@ export class ViewMapper {
     return Array.from(views.values());
   }
 
-  private loadViews(): Promise<Map<string, ViewDefinition>> {
+  protected loadViews(): Promise<Map<string, ViewDefinition>> {
     return this.resolver.resolve(this.cacheKey(), () => this.fetchViews());
   }
 
@@ -113,6 +98,58 @@ export class ViewMapper {
       await this.loadDependencyViews(views);
     }
   }
+}
+
+/**
+ * A `ViewMapper` preloaded with view definitions captured at package generation
+ * time. `getView` / `getViews` never call CDF.
+ */
+export class ViewMapperCache extends ViewMapper {
+  private readonly viewsByExternalId: Map<string, ViewDefinition>;
+
+  constructor(views: Iterable<ViewDefinition> | Map<string, ViewDefinition>) {
+    super(undefined as unknown as CognitePort, VIEW_MAPPER_CACHE_DATA_MODEL);
+    this.viewsByExternalId = indexViews(views);
+  }
+
+  static fromViews(views: readonly object[]): ViewMapperCache {
+    return new ViewMapperCache(views as ViewDefinition[]);
+  }
+
+  protected override loadViews(): Promise<Map<string, ViewDefinition>> {
+    return Promise.resolve(this.viewsByExternalId);
+  }
+}
+
+const VIEW_MAPPER_CACHE_DATA_MODEL: DataModelId = {
+  space: "",
+  externalId: "",
+  version: "",
+};
+
+function indexViews(
+  views: Iterable<ViewDefinition> | Map<string, ViewDefinition>,
+): Map<string, ViewDefinition> {
+  if (views instanceof Map) {
+    return new Map(views);
+  }
+  return new Map(Array.from(views, (view) => [view.externalId, view]));
+}
+
+function requireView(
+  views: Map<string, ViewDefinition>,
+  externalId: string,
+  dataModelId: DataModelId,
+): ViewDefinition {
+  const view = views.get(externalId);
+  if (!view) {
+    throw new Error(
+      dataModelId.externalId
+        ? `View "${externalId}" not found in data model "${dataModelId.externalId}"`
+        : `View "${externalId}" is not available in data model`,
+    );
+  }
+  return view;
 }
 
 function collectPropertyRefs(property: ViewDefinitionProperty): ViewReference[] {

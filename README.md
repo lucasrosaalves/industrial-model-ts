@@ -933,9 +933,19 @@ Cognite `date` and `timestamp` view properties are always converted to JavaScrip
 
 ## Caching Schema Loads
 
-`IndustrialModelClient` loads view definitions from CDF once and memoizes them for its own lifetime. Pass a `cache` implementing `CachePort` (and optionally `cacheTtlMs`) to persist that schema across page reloads in a browser (`localStorage`/`sessionStorage`) or across process restarts in Node (a file, a KV store, ...) — the library ships adapters for the browser case and an in-memory one, and the interface is small enough to implement for anything else.
+`IndustrialModelClient` loads view definitions from CDF once and memoizes them for the lifetime of the client instance.
 
-See the [Cache documentation](./src/cache/README.md) for the `CachePort` interface, the built-in adapters, and a worked Node file-backed example.
+Generated packages embed a `ViewMapperCache` with the schema captured at generation time, so the client does not fetch views from CDF at runtime. Pass `--no-view-mapper-cache` when generating if you want the client to load views from CDF instead.
+
+You can also pass a cache yourself:
+
+```ts
+import { IndustrialModelClient, ViewMapperCache } from "industrial-model";
+
+const model = new IndustrialModelClient(client, dataModelId, {
+  viewMapperCache: ViewMapperCache.fromViews(viewDumps),
+});
+```
 
 ## Cognite Core Client
 
@@ -1158,7 +1168,7 @@ if (cursor) {
 | `client` | `CogniteClient` | Authenticated Cognite SDK client. |
 | `options` | `IndustrialModelClientOptions` | Optional. Same options as `IndustrialModelClient`. |
 
-Pre-configured for the Cognite Core Data Model (`cdf_cdm/CogniteCore/v1`). The exported constant `COGNITE_CORE_DATA_MODEL` holds the data model identifier if you need to pass it to other utilities.
+Pre-configured for the Cognite Core Data Model (`cdf_cdm/CogniteCore/v1`). Uses an embedded `ViewMapperCache`, so view definitions are not fetched from CDF. The exported constant `COGNITE_CORE_DATA_MODEL` holds the data model identifier if you need to pass it to other utilities. `VIEW_MAPPER_CACHE` is also exported.
 
 ### `core.query(viewExternalId)(options)`
 
@@ -1187,10 +1197,9 @@ Same as `model.datapoints` on `IndustrialModelClient`. All four methods — `ret
 | `client` | `CogniteClient` | Authenticated Cognite SDK client. |
 | `dataModelId` | `DataModelId` | Data model `space`, `externalId`, and `version`. |
 | `options.validateResults` | `boolean` | Optional. Parse result items with generated Zod schemas. |
-| `options.cache` | `CachePort` | Optional. Persists loaded view definitions beyond the client instance's lifetime. See [Caching Schema Loads](./src/cache/README.md). |
-| `options.cacheTtlMs` | `number` | Optional. Milliseconds after which a cached schema is treated as stale and reloaded. Only relevant with `options.cache`. |
+| `options.viewMapperCache` | `ViewMapperCache` | Optional. Preloaded view definitions captured at generation time. When set, the client does not fetch views from CDF. Generated packages pass this by default. |
 
-On the first query or aggregation, view definitions are loaded from CDF and memoized. Without `options.cache`, that memoization lives only for the lifetime of the client instance; with `options.cache`, it also persists in whatever store the `CachePort` is backed by (`localStorage`, a file, a KV service, ...).
+On the first query or aggregation, view definitions are loaded from CDF and memoized for the lifetime of the client instance, unless `options.viewMapperCache` is provided.
 
 ### `model.query<TModel>()(options)`
 
@@ -1365,6 +1374,7 @@ Logical combinators `AND`, `OR`, and `NOT` are supported at any nesting level, i
 | Symbol | Description |
 | --- | --- |
 | `IndustrialModelClient` | Main client for any FDM data model. |
+| `ViewMapperCache` | Preloaded view definitions so the client does not fetch views from CDF. |
 | `IndustrialModel`, `ModelProps`, `ModelRelations` | Type helpers for model properties and relation metadata. |
 | `NodeId`, `DataModelId` | Instance and data model identifiers. |
 | `QuerySelect` | Type helper for reusable query selections. |
@@ -1384,6 +1394,7 @@ Logical combinators `AND`, `OR`, and `NOT` are supported at any nesting level, i
 | --- | --- |
 | `CogniteCoreClient` | Convenience client pre-configured for `cdf_cdm/CogniteCore/v1`. |
 | `COGNITE_CORE_DATA_MODEL` | Data model identifier constant for Cognite Core v1. |
+| `VIEW_MAPPER_CACHE` | Embedded Cognite Core `ViewMapperCache`. |
 | `CogniteCoreViewExternalId` | Union type of all Cognite Core view names. |
 | `CogniteAsset`, `CogniteAssetClass`, `CogniteAssetType` | Asset hierarchy views. |
 | `CogniteEquipment`, `CogniteEquipmentType` | Equipment views. |
@@ -1416,7 +1427,7 @@ Logical combinators `AND`, `OR`, and `NOT` are supported at any nesting level, i
 
 ## Code Generator
 
-The package includes a CLI to generate typed models and client code from a Cognite data model. See the [CLI documentation](./src/cli/README.md). Committed Cognite Core types in `src/cognite-core/types.ts` are regenerated with `npm run generate:cognite-core`.
+The package includes a CLI to generate typed models and client code from a Cognite data model. See the [CLI documentation](./src/cli/README.md). Generated packages embed a `ViewMapperCache` by default so the client does not fetch views from CDF at runtime. Committed Cognite Core types and `ViewMapperCache` in `src/cognite-core/` are regenerated with `npm run generate:cognite-core`.
 
 ## Releasing
 
