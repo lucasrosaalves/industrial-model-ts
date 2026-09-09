@@ -23,6 +23,10 @@ export const generateCommand = new Command("generate")
   .option("--output <path>", "Output directory")
   .option("--client-name <name>", "Name for the generated client function")
   .option("--json-types <path>", "Path to a TypeScript file with JSON property type overrides")
+  .option(
+    "--no-view-mapper-cache",
+    "Do not embed a ViewMapperCache; the generated client will fetch views from CDF at runtime",
+  )
   .action(async (flags) => {
     const auth = await promptAuth({
       token: flags.token,
@@ -60,6 +64,7 @@ export const generateCommand = new Command("generate")
       clientName: options.clientName,
       outputPath: options.outputPath,
       packageVersion: process.env.PACKAGE_VERSION ?? "unknown",
+      viewMapperCache: flags.viewMapperCache,
     });
 
     console.log(

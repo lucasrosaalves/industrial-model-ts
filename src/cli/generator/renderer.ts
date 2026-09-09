@@ -12,6 +12,7 @@ import { parseViews } from "./parser";
 import { renderClient } from "./templates/client";
 import { renderIndex } from "./templates/index";
 import { renderTypes } from "./templates/types";
+import { renderViewMapperCache } from "./templates/view-mapper";
 
 export interface GeneratorConfig {
   dataModelSpace: string;
@@ -22,8 +23,15 @@ export interface GeneratorConfig {
   outputPath: string;
   packageVersion: string;
   generatedAt: string;
+  /**
+   * Embed a `ViewMapperCache` in the generated package so the client does not
+   * fetch views from CDF at runtime. Enabled by default.
+   */
+  viewMapperCache: boolean;
   /** Module specifier used in generated type imports. Defaults to `"industrial-model"`. */
   typesModule?: string;
+  /** Module specifier used to import `ViewMapperCache`. Defaults to `"industrial-model"`. */
+  runtimeModule?: string;
   /** Skip the `Generated at:` header line so committed output is stable. */
   omitGeneratedAt?: boolean;
   /** Skip the `industrial-model v…` header line so committed output is stable across releases. */
@@ -37,6 +45,7 @@ export function createGeneratorConfig(options: {
   clientName: string | undefined;
   outputPath: string | undefined;
   packageVersion: string;
+  viewMapperCache?: boolean;
 }): GeneratorConfig {
   const clientName = options.clientName || toPascal(options.dataModelId);
   return {
@@ -48,6 +57,7 @@ export function createGeneratorConfig(options: {
     outputPath: options.outputPath || "./generated",
     packageVersion: options.packageVersion,
     generatedAt: new Date().toISOString(),
+    viewMapperCache: options.viewMapperCache ?? true,
   };
 }
 
@@ -63,7 +73,7 @@ export function generate(
     applyJsonTypeOverrides(viewDefinitions, jsonTypesConfig);
   }
 
-  generateFromDefinitions(viewDefinitions, config, jsonTypesConfig);
+  generateFromDefinitions(viewDefinitions, config, jsonTypesConfig, views);
 }
 
 function applyJsonTypeOverrides(views: ViewDefinition[], jsonTypesConfig: JsonTypesConfig): void {
@@ -101,8 +111,12 @@ export function generateFromDefinitions(
   viewDefinitions: ViewDefinition[],
   config: GeneratorConfig,
   jsonTypesConfig?: JsonTypesConfig,
+  cacheViews?: CogniteViewDefinition[],
 ): void {
   const outputDir = join(config.outputPath, config.dataModelId);
+  const embedViewMapperCache =
+    config.viewMapperCache && cacheViews !== undefined && cacheViews.length > 0;
+  const fileConfig = { ...config, viewMapperCache: embedViewMapperCache };
 
   if (existsSync(outputDir)) {
     rmSync(outputDir, { recursive: true });
@@ -115,8 +129,11 @@ export function generateFromDefinitions(
 
   writeFileSync(
     join(outputDir, "types.ts"),
-    renderTypes(viewDefinitions, config, customTypeDeclarations),
+    renderTypes(viewDefinitions, fileConfig, customTypeDeclarations),
   );
-  writeFileSync(join(outputDir, "client.ts"), renderClient(viewDefinitions, config));
-  writeFileSync(join(outputDir, "index.ts"), renderIndex(config));
+  writeFileSync(join(outputDir, "client.ts"), renderClient(viewDefinitions, fileConfig));
+  writeFileSync(join(outputDir, "index.ts"), renderIndex(fileConfig));
+  if (embedViewMapperCache && cacheViews) {
+    writeFileSync(join(outputDir, "view-mapper.ts"), renderViewMapperCache(cacheViews, fileConfig));
+  }
 }

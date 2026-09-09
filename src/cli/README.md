@@ -2,7 +2,7 @@
 
 The `industrial-model` package includes a CLI that connects to Cognite Data Fusion, reads a data model's view definitions, and generates fully-typed TypeScript code.
 
-Committed Cognite Core types in this repository (`src/cognite-core/types.ts`) are generated from `test/fixtures/cognite-core-data-model.json`. Regenerate them with `npm run generate:cognite-core`. `src/cognite-core/client.ts` is hand-maintained and is not overwritten.
+Committed Cognite Core types and `ViewMapperCache` in this repository (`src/cognite-core/types.ts`, `src/cognite-core/view-mapper.ts`) are generated from `test/fixtures/cognite-core-data-model.json`. Regenerate them with `npm run generate:cognite-core`. `src/cognite-core/client.ts` is hand-maintained and is not overwritten.
 
 ## Generated output
 
@@ -10,10 +10,16 @@ For a data model with views `Equipment` and `Facility`, the CLI produces:
 
 ```
 generated/MyDataModel/
-├── types.ts     # IndustrialModel<Props, Relations> type aliases and executors
-├── client.ts    # MyDataModelClient class and createMyDataModelClient() shortcuts
-└── index.ts     # Re-exports
+├── types.ts        # IndustrialModel<Props, Relations> type aliases and executors
+├── client.ts       # MyDataModelClient class and createMyDataModelClient() shortcuts
+├── view-mapper.ts  # VIEW_MAPPER_CACHE (omit with --no-view-mapper-cache)
+└── index.ts        # Re-exports
 ```
+
+Generated packages include a `ViewMapperCache` by default. The client passes it into
+`IndustrialModelClient`, so the engine uses the schema captured at generation time and
+does not fetch views from CDF at runtime. Pass `--no-view-mapper-cache` when generating
+if you want the client to load views from CDF instead.
 
 Views declared as `usedFor: "edge"` are generated as `IndustrialModel<Props, Relations, "edge">`
 aliases. Query results for those views include edge endpoints (`startNode` and `endNode`) in
@@ -57,8 +63,11 @@ After authentication, if the JWT contains `projects` and `aud` claims, the CLI p
 | `--output <path>` | Output directory (default: `./generated`) |
 | `--client-name <name>` | Pascal-case name for the client (default: derived from data model ID) |
 | `--json-types <path>` | Path to a TypeScript file with JSON property type overrides (optional) |
+| `--no-view-mapper-cache` | Do not embed a `ViewMapperCache`; the generated client fetches views from CDF at runtime |
 
 When flags are omitted and no token is provided, the CLI falls back to interactive prompts. If `--token`, `--project`, and `--base-url` are provided but `--data-model` is not, the CLI connects to CDF and presents a fuzzy-searchable list of available data models.
+
+The generated package includes a `ViewMapperCache` by default so the client uses the schema captured at generation time. Pass `--no-view-mapper-cache` to skip it and fetch views from CDF at runtime.
 
 ## Example generated code
 
@@ -99,8 +108,9 @@ export type Facility = IndustrialModel<{
 // industrial-model v0.2.0
 
 import type { CogniteClient } from "@cognite/sdk";
-import { IndustrialModelClient, type DataModelId } from "industrial-model";
+import { IndustrialModelClient, type DataModelId, type IndustrialModelClientOptions } from "industrial-model";
 import type { MyDataModelQueryExecutor, MyDataModelViewExternalId } from "./types";
+import { VIEW_MAPPER_CACHE } from "./view-mapper";
 
 export const DATA_MODEL = {
   space: "my-space",
@@ -111,8 +121,11 @@ export const DATA_MODEL = {
 export class MyDataModelClient {
   private readonly model: IndustrialModelClient;
 
-  constructor(cogniteClient: CogniteClient) {
-    this.model = new IndustrialModelClient(cogniteClient, DATA_MODEL);
+  constructor(cogniteClient: CogniteClient, options: IndustrialModelClientOptions = {}) {
+    this.model = new IndustrialModelClient(cogniteClient, DATA_MODEL, {
+      ...options,
+      viewMapperCache: VIEW_MAPPER_CACHE,
+    });
   }
 
   query<TView extends MyDataModelViewExternalId>(

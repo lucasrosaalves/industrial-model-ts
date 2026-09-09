@@ -1,5 +1,5 @@
-import type { CachePort } from "./cache";
 import type { EdgeDefinition, NodeDefinition, NodeOrEdge } from "./cognite";
+import type { ViewMapperCache } from "./mappers/view-mapper";
 
 export type { NodeOrEdge };
 
@@ -17,8 +17,8 @@ export type QueryResultMap = Record<string, NodeOrEdge[]>;
 
 export type IndustrialModelClientOptions = {
   validateResults?: boolean;
-  cache?: CachePort;
-  cacheTtlMs?: number;
+  /** Preloaded view definitions. When set, the client does not fetch views from CDF. */
+  viewMapperCache?: ViewMapperCache;
 };
 
 type Simplify<T> = { [K in keyof T]: T[K] } & {};

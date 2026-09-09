@@ -1,13 +1,19 @@
 /**
- * Regenerates `src/cognite-core/types.ts` from the Cognite Core fixture.
+ * Regenerates `src/cognite-core/types.ts` and `src/cognite-core/view-mapper.ts`
+ * from the Cognite Core fixture.
  *
  * Usage: npm run generate:cognite-core
+ *
+ * `src/cognite-core/client.ts` is hand-maintained and is not overwritten.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { renderCogniteCoreTypes } from "../src/cli/generator/cognite-core.js";
+import {
+  renderCogniteCoreTypes,
+  renderCogniteCoreViewMapper,
+} from "../src/cli/generator/cognite-core.js";
 import type { ViewDefinition } from "../src/cognite";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -23,3 +29,7 @@ if (!views || views.length === 0) {
 const typesPath = join(root, "src/cognite-core/types.ts");
 writeFileSync(typesPath, renderCogniteCoreTypes(views));
 console.log(`Wrote ${typesPath} (${views.length} views)`);
+
+const viewMapperPath = join(root, "src/cognite-core/view-mapper.ts");
+writeFileSync(viewMapperPath, renderCogniteCoreViewMapper(views));
+console.log(`Wrote ${viewMapperPath}`);
