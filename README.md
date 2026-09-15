@@ -681,7 +681,9 @@ items[0]?.datapoints;
 items[0]?.cursor; // next cursor, or null
 ```
 
-Pass `limit: -1` to follow datapoint cursors and return all pages for each requested time series.
+Cognite accepts at most 100 time series and 10_000 datapoints per retrieve request. The SDK splits larger `timeSeries` lists into chunks of 100 and fetches them in parallel.
+
+Pass `limit: -1` to follow datapoint cursors and return all pages for each requested time series. That sentinel is never sent to Cognite; each page uses a limit of 10_000 until every series' cursor is exhausted.
 
 ```ts
 const history = await model.datapoints.retrieve({

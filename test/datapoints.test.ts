@@ -264,11 +264,75 @@ describe("DatapointsMapper.retrieve", () => {
 
     expect(cognite.retrieveDatapoints).not.toHaveBeenCalled();
   });
+
+  it("throws on invalid limit before calling Cognite", async () => {
+    const cognite = makeCogniteMock();
+    const mapper = makeMapper(cognite);
+
+    await expect(mapper.retrieve({ timeSeries: [TS_A], limit: 0 })).rejects.toThrow(
+      /Invalid datapoints options.*\blimit\b/s,
+    );
+    await expect(mapper.retrieve({ timeSeries: [TS_A], limit: -2 })).rejects.toThrow(
+      /Invalid datapoints options.*\blimit\b/s,
+    );
+    await expect(mapper.retrieve({ timeSeries: [TS_A], limit: 1.5 })).rejects.toThrow(
+      /Invalid datapoints options.*\blimit\b/s,
+    );
+
+    expect(cognite.retrieveDatapoints).not.toHaveBeenCalled();
+  });
+
+  it("chunks time series into multiple Cognite calls of at most 100", async () => {
+    const series = Array.from({ length: 150 }, (_, i) => ({
+      space: "ts-space",
+      externalId: `ts-${i}`,
+    }));
+    const cognite = makeCogniteMock();
+    cognite.retrieveDatapoints = vi.fn().mockImplementation(async (opts) => ({
+      items: opts.items.map((item: { space: string; externalId: string }) =>
+        makeDatapointResponse(item, {
+          datapoints: [{ timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 1 }],
+        }),
+      ),
+    }));
+    const mapper = makeMapper(cognite);
+
+    const result = await mapper.retrieve({ timeSeries: series, limit: 10 });
+
+    expect(cognite.retrieveDatapoints).toHaveBeenCalledTimes(2);
+    const callSizes = vi
+      .mocked(cognite.retrieveDatapoints)
+      .mock.calls.map((call) => call[0].items.length)
+      .sort((a, b) => b - a);
+    expect(callSizes).toEqual([100, 50]);
+    expect(result.items).toHaveLength(150);
+    expect(result.items[0]?.timeSeries.externalId).toBe("ts-0");
+    expect(result.items[100]?.timeSeries.externalId).toBe("ts-100");
+    expect(result.items[149]?.timeSeries.externalId).toBe("ts-149");
+  });
 });
 
 // ─── auto-pagination (limit: -1) ─────────────────────────────────────────────
 
 describe("DatapointsMapper.retrieve (auto-pagination)", () => {
+  it("sends Cognite limit 10000 instead of -1", async () => {
+    const cognite = makeCogniteWithRetrieve([
+      makeDatapointResponse(TS_A, {
+        datapoints: [{ timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 1 }],
+      }),
+    ]);
+    const mapper = makeMapper(cognite);
+
+    await mapper.retrieve({ timeSeries: [TS_A], limit: -1 });
+
+    expect(cognite.retrieveDatapoints).toHaveBeenCalledWith(
+      expect.objectContaining({ limit: 10_000 }),
+    );
+    for (const [call] of vi.mocked(cognite.retrieveDatapoints).mock.calls) {
+      expect(call.limit).not.toBe(-1);
+    }
+  });
+
   it("makes a single call when no series returns a nextCursor", async () => {
     const cognite = makeCogniteWithRetrieve([
       makeDatapointResponse(TS_A, {
@@ -353,6 +417,48 @@ describe("DatapointsMapper.retrieve (auto-pagination)", () => {
     expect(tsA?.datapoints).toHaveLength(1);
     expect(tsB?.datapoints).toHaveLength(2);
     expect(tsB?.cursor).toBeNull();
+  });
+
+  it("chunks time series and paginates within each chunk when limit is -1", async () => {
+    const series = Array.from({ length: 150 }, (_, i) => ({
+      space: "ts-space",
+      externalId: `ts-${i}`,
+    }));
+    const pageOneDone = new Set(series.slice(0, 149).map((s) => s.externalId));
+    const cognite = makeCogniteMock();
+    cognite.retrieveDatapoints = vi.fn().mockImplementation(async (opts) => {
+      expect(opts.limit).toBe(10_000);
+      expect(opts.limit).not.toBe(-1);
+      expect(opts.items.length).toBeLessThanOrEqual(100);
+
+      return {
+        items: opts.items.map((item: { space: string; externalId: string; cursor?: string }) => {
+          if (item.cursor === "page-2") {
+            return makeDatapointResponse(item, {
+              datapoints: [{ timestamp: new Date("2024-01-01T01:00:00.000Z"), value: 2 }],
+            });
+          }
+          const needsSecondPage = !pageOneDone.has(item.externalId);
+          return makeDatapointResponse(item, {
+            datapoints: [{ timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 1 }],
+            ...(needsSecondPage ? { nextCursor: "page-2" } : {}),
+          });
+        }),
+      };
+    });
+    const mapper = makeMapper(cognite);
+
+    const result = await mapper.retrieve({ timeSeries: series, limit: -1 });
+
+    // Two first-page chunk calls + one follow-up for ts-149
+    expect(cognite.retrieveDatapoints).toHaveBeenCalledTimes(3);
+    expect(result.items).toHaveLength(150);
+    expect(result.items[0]?.datapoints).toHaveLength(1);
+    expect(result.items[149]?.datapoints).toEqual([
+      { timestamp: new Date("2024-01-01T00:00:00.000Z"), value: 1 },
+      { timestamp: new Date("2024-01-01T01:00:00.000Z"), value: 2 },
+    ]);
+    expect(result.items.every((item) => item.cursor === null)).toBe(true);
   });
 });
 

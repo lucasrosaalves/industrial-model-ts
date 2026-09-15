@@ -5,11 +5,14 @@ const dateSchema = z.date();
 
 const nodeIdSchema = z.object({ space: z.string(), externalId: z.string() }).loose();
 
+const limitSchema = z.union([z.literal(-1), z.number().int().positive()]);
+
 const retrieveOptionsSchema = z
   .object({
     timeSeries: z.array(nodeIdSchema),
     start: dateSchema.optional(),
     end: dateSchema.optional(),
+    limit: limitSchema.optional(),
   })
   .loose();
 

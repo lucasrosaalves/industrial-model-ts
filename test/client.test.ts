@@ -824,7 +824,7 @@ describe("IndustrialModelClient", () => {
 
     expect(client.datapoints.retrieve).toHaveBeenCalledTimes(2);
     expect(client.datapoints.retrieve).toHaveBeenLastCalledWith({
-      limit: -1,
+      limit: 10_000,
       items: [
         {
           instanceId: { space: "ts-space", externalId: "temperature" },
