@@ -14,8 +14,9 @@ import type { EvaluationResult, Parameters } from "./types";
  * - conditional: ``{A} / {B} if {B} != 0 else 0``
  * - functions: ``rolling_average({A}, N)`` — same-length simple moving
  *   average. The window ``N`` must be a positive integer constant.
- *   Incomplete windows at the start of a series average whatever points
- *   exist so far, so the result stays aligned with the inputs. Put
+ *   Incomplete windows at the start of a series average whatever finite
+ *   points exist so far, so the result stays aligned with the inputs.
+ *   ``NaN`` entries are skipped; an all-``NaN`` window is ``NaN``. Put
  *   value-dependent guards *inside* the series argument: an outer
  *   ``if`` does not protect neighbors in the window of a selected index.
  *

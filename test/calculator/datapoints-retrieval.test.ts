@@ -124,6 +124,88 @@ describe("DatapointsRetriever: request building and de-duplication", () => {
     expect(requestItems(cognite)[0]?.aggregates).toEqual(["average"]);
   });
 
+  it("sets timeZone on every aggregate query", async () => {
+    const { retriever, cognite } = makeRetriever([
+      makeResultItem({ datapoints: [{ timestamp: T0, average: 1 }] }),
+      makeResultItem({ datapoints: [{ timestamp: T0, sum: 2 }] }),
+    ]);
+
+    await retriever.retrieveDatapoints(
+      [aggregateParam(TS_A, "A", "average", "1h"), aggregateParam(TS_B, "B", "sum", "1d")],
+      START,
+      END,
+      "America/New_York",
+    );
+
+    expect(requestItems(cognite).map((item) => item.timeZone)).toEqual([
+      "America/New_York",
+      "America/New_York",
+    ]);
+  });
+
+  it("applies timeZone when calling CDF", async () => {
+    const { retriever, cognite } = makeRetriever([
+      makeResultItem({ datapoints: [{ timestamp: T0, average: 1 }] }),
+    ]);
+
+    await retriever.retrieveDatapoints(
+      [aggregateParam(TS_A, "A", "average", "1d")],
+      START,
+      END,
+      "America/New_York",
+    );
+
+    expect(requestItems(cognite)[0]).toMatchObject({
+      timeZone: "America/New_York",
+      granularity: "1d",
+    });
+  });
+
+  it("does not set timeZone on a raw retrieve", async () => {
+    const { retriever, cognite } = makeRetriever([
+      makeResultItem({ datapoints: [{ timestamp: T0, value: 1 }] }),
+    ]);
+
+    await retriever.retrieveDatapoints([rawParam(TS_A, "A")], START, END, "America/New_York");
+
+    expect(requestItems(cognite)[0]?.granularity).toBeUndefined();
+    expect(requestItems(cognite)[0]?.timeZone).toBeUndefined();
+  });
+
+  it("sets timeZone only on aggregates in a mixed retrieve", async () => {
+    const { retriever, cognite } = makeRetriever([
+      makeResultItem({ datapoints: [{ timestamp: T0, value: 1 }] }),
+      makeResultItem({ datapoints: [{ timestamp: T0, sum: 2 }] }),
+    ]);
+
+    await retriever.retrieveDatapoints(
+      [rawParam(TS_A, "A"), aggregateParam(TS_B, "B", "sum", "1d")],
+      START,
+      END,
+      "America/New_York",
+    );
+
+    expect(requestItems(cognite)[0]?.timeZone).toBeUndefined();
+    expect(requestItems(cognite)[1]?.timeZone).toBe("America/New_York");
+  });
+
+  it("keeps a single timeZone when merging aggregates", async () => {
+    const { retriever, cognite } = makeRetriever([
+      makeResultItem({ datapoints: [{ timestamp: T0, average: 1, sum: 2 }] }),
+    ]);
+
+    await retriever.retrieveDatapoints(
+      [aggregateParam(TS_A, "A", "average", "1h"), aggregateParam(TS_A, "B", "sum", "1h")],
+      START,
+      END,
+      "Europe/Oslo",
+    );
+
+    expect(requestItems(cognite)).toHaveLength(1);
+    expect(requestItems(cognite)[0]?.aggregates).toEqual(["average", "sum"]);
+    expect(requestItems(cognite)[0]?.timeZone).toBe("Europe/Oslo");
+  });
+
   it("same timeseries different granularity produces separate requests", async () => {
     const { retriever, cognite } = makeRetriever([
       makeResultItem({ datapoints: [{ timestamp: T0, average: 1 }] }),

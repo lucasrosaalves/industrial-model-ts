@@ -9,6 +9,7 @@ The formula engine that powers it (`evaluate`) is also exported on its own, so y
 - [Quick start](#quick-start)
 - [Parameter kinds](#parameter-kinds)
 - [Aggregated parameters](#aggregated-parameters)
+- [Calendar timezones](#calendar-timezones)
 - [Constants](#constants)
 - [Multiple time series per parameter](#multiple-time-series-per-parameter)
 - [Timestamp alignment](#timestamp-alignment)
@@ -92,6 +93,41 @@ Both parameters read the same time series at the same granularity, so the calcul
 
 Supported `aggregateType` values: `"average"`, `"max"`, `"min"`, `"count"`, `"sum"`, `"interpolation"`, `"stepInterpolation"`, `"totalVariation"`, `"continuousVariance"`, `"discreteVariance"`.
 
+## Calendar timezones
+
+CDF stores datapoints as UTC instants. Calendar aggregates (`hour`, `day`, `month`) default to **UTC midnight / hour / month**. Pass `timeZone` on `calculate` / `calculateMultiples` so every such aggregate in that call uses the same local calendar, including DST. CDF accepts IANA ids (`America/New_York`, `Europe/Oslo`) and fixed offsets (`UTC+05:30`, `UTC+01:00`); omit the argument for UTC.
+
+`timeZone` does **not** change raw datapoints or sub-hour granularities (`1m`, `15m`, …). It also does **not** reinterpret `start` / `end`: those stay the UTC instants you pass. For “the New York calendar day 2024-01-15” pass the UTC instants of that day’s NY midnight, *and* `timeZone: "America/New_York"`. Result timestamps remain UTC instants of the local bucket start (what CDF returns). When `rolling_average` fills an hour-or-longer grid, those steps use the same calendar — see [Rolling average](#rolling-average).
+
+The argument is **per call**, not per query or parameter. Group entities that share a timezone into one `calculateMultiples`; run another call for a different timezone. The string is forwarded to CDF unchanged; a blank or unknown id fails on retrieve the same way a direct datapoints call would.
+
+```ts
+const result = await calculator.calculate(
+  {
+    formula: "{GQ} + {SQ}",
+    parameters: [
+      {
+        type: "single_timeseries",
+        alias: "GQ",
+        timeSeries: good,
+        aggregateType: "sum",
+        granularity: "1d",
+      },
+      {
+        type: "single_timeseries",
+        alias: "SQ",
+        timeSeries: scrap,
+        aggregateType: "sum",
+        granularity: "1d",
+      },
+    ],
+  },
+  start,
+  end,
+  "America/New_York",
+);
+```
+
 ## Constants
 
 Use a constant parameter for fixed values — conversion factors, thresholds, headcount for a shift — that don't come from a time series:
@@ -156,7 +192,7 @@ Element-wise formulas like `{A} + {B}` are evaluated on a single time axis. `Cal
 | Mode | Behavior |
 |---|---|
 | `"intersect"` (default) | Keep timestamps present in **every** time-series parameter. Gaps in one series drop that timestamp from the result rather than failing the query. If there is no overlap, the result is empty. |
-| `"strict"` | Require identical timestamps at every index. Raise `ParameterTimestampError` if they differ. Use this when a missing bucket should fail the job rather than be omitted. |
+| `"strict"` | Require identical timestamps at every index. Raise `ParameterTimestampError` if they differ. Use this when a missing bucket should fail the job rather than be omitted. Grid fill for `rolling_average` does not bypass this check. |
 
 This is the same intersection rule used inside a multi-time-series parameter. Constants are broadcast onto whatever timestamps remain.
 
@@ -170,7 +206,7 @@ This is the same intersection rule used inside a multi-time-series parameter. Co
 
 ## Evaluating several queries at once
 
-`calculateMultiples` batches the datapoint retrieval for several queries into one de-duplicated round trip, returning one `CalculationResult` per query, in order. Each query keeps its own `alignment`. Constants never reach Cognite.
+`calculateMultiples` batches the datapoint retrieval for several queries into one de-duplicated round trip, returning one `CalculationResult` per query, in order. Each query keeps its own `alignment`. Constants never reach Cognite. Pass `timeZone` so every hour-and-longer aggregate in the batch uses the same calendar (see [Calendar timezones](#calendar-timezones)):
 
 ```ts
 const [efficiency, downtime] = await calculator.calculateMultiples(
@@ -321,7 +357,7 @@ clearCache();
 - **Comparisons:** `==` `!=` `<` `<=` `>` `>=` (chained comparisons are supported, e.g. `0 <= {x} < 100`)
 - **Boolean:** `and` `or`
 - **Conditional:** `{A} / {B} if {B} != 0 else 0`
-- **Functions:** `rolling_average(series, N)` — simple moving average of the last `N` aligned points; see [Rolling average](#rolling-average)
+- **Functions:** `rolling_average(series, N)` — simple moving average of the last `N` aligned points (NaNs skipped); see [Rolling average](#rolling-average)
 
 Comparisons, boolean operators, and conditionals are evaluated element-by-element, and only the selected branch runs for a given element — so a value-dependent failure (like division by zero) in an unselected branch never throws:
 
@@ -338,9 +374,9 @@ evaluate("{A} % {B}", { A: [-7], B: [3] }); // [2], not [-1]
 
 ## Rolling average
 
-`rolling_average(series, N)` is a simple moving average over the last `N` aligned points. It is **count-based**, not time-based: `N` is a positive integer constant (literals and folded expressions like `12 * 2` or `6 / 2` are fine; a parameter `{WINDOW}` is not). The series argument can be any numeric sub-expression.
+`rolling_average(series, N)` is a simple moving average (not time-weighted, and not a CDF `aggregateType: "average"`). `N` is a positive integer constant (literals and folded expressions like `12 * 2` or `6 / 2` are fine; a parameter `{WINDOW}` is not). The series argument can be any numeric sub-expression.
 
-The result is **the same length as the inputs**. At the start of a series there are fewer than `N` points, so those indexes average whatever exists so far (index 0 is itself; the true `N`-point average starts at index `N - 1`). There are no NaNs and no dropped timestamps, so `inputs[alias][i]` still corresponds to `datapoints[i]`.
+The result is **the same length as the inputs**. At the start of a series there are fewer than `N` points, so those indexes average whatever finite values exist so far (index 0 is itself; the true `N`-point average starts at index `N - 1`). `NaN` entries are skipped in the window; a window with no finite values is `NaN`. After `Calculator` drops those empty windows on the time-grid path (see below), `inputs[alias][i]` still corresponds to `datapoints[i]`.
 
 ```ts
 evaluate("rolling_average({A}, 3)", { A: [10, 20, 30, 40] });
@@ -353,9 +389,63 @@ evaluate("rolling_average({A}, 3) - {B}", {
 // [9, 13, 17, 26]
 ```
 
-This is not a CDF bucket aggregate (`aggregateType: "average"` + `granularity`) and not time-weighted. Hourly aggregates plus `rolling_average({TEMP}, 24)` is the 24-hour moving average of hourly values. For raw irregular points it is “last N aligned samples.”
+`evaluate()` is always **count-based**: last `N` values in the sequences you pass. `Calculator` is count-based too unless every time-series parameter is a uniform CDF aggregate *and* the formula calls `rolling_average` — then it fills the bucket grid first.
 
-`Calculator` still fetches `[start, end]` only. The first `N - 1` points in the result are a warmup; pass an earlier `start` if you need a full window at the beginning of the range you care about. Unknown function names, keyword arguments, starred arguments, and a non-constant or non-positive window still raise `InvalidFormulaError`.
+### When `Calculator` stays count-based
+
+The query is aligned as usual (`intersect` or `strict`), then `rolling_average` runs over those surviving points. Gaps in time are not inserted.
+
+| Case | What happens |
+|---|---|
+| `evaluate(...)` | Last `N` values in the arrays you pass. No timestamps. |
+| Raw series (no `aggregateType` / `granularity`) | Last `N` retrieved points. A 4-minute hole between samples still counts as one step. |
+| Mixed granularities (e.g. `1m` and `5m`) | Same: last `N` aligned points, no calendar fill. |
+| Any time-series parameter is empty | No fill. Then `intersect` yields an empty result; `strict` raises if another series has points. |
+| Formula has no `rolling_average` call | Aggregates are **not** filled. `{A} + {B}` stays timestamp intersection. |
+| Granularity cannot be parsed / grid is empty | Falls back to the align path above. |
+
+Same minute sums at `t0,t1,t2` then a gap then `t6,t7,t8` (`10, 20, 30, 100, 110, 120`):
+
+```text
+rolling_average({A}, 3) -> 10, 15, 20, 50, 80, 110
+```
+
+`50` is `(20+30+100)/3` — the window jumped the hole.
+
+### When `Calculator` fills a time grid
+
+All of these must hold:
+
+1. Every time-series parameter has an `aggregateType` and the **same** `granularity` (constants do not count).
+2. Every one of those series is non-empty.
+3. The formula contains a `rolling_average(...)` call (nested is fine).
+4. A bucket grid can be built.
+
+Then each series is expanded onto every bucket that **overlaps** `[start, end)`. Missing buckets become `NaN` in `inputs` and are skipped inside the window, so `rolling_average({GQ}, 3)` on minute sums is “last 3 minutes that have data.” After evaluation, timestamps whose **formula** result is `NaN` are omitted from `datapoints` and `inputs`.
+
+Same data as above, `granularity: "1m"`, window `[t0, t9)`:
+
+```text
+inputs GQ: 10, 20, 30, NaN, NaN, NaN, 100, 110, 120 (t0..t8)
+rolling avg 3: 10, 15, 20, 25, 30, — , 100, 105, 110
+```
+
+`t5` is dropped (window `t3..t5` is all `NaN`). `t3` is `25` = `(20+30)/2`. `t6` is `100` (only the new sample). That is the difference from count-based `50` at the first post-gap point.
+
+| Case | What happens |
+|---|---|
+| Hole in the middle | Filled with `NaN`, skipped in the window; later buckets still see earlier finite values that fall inside `N` steps. |
+| Trailing buckets after the last sample | Partial windows keep emitting until the window is all `NaN`. |
+| CDF bucket starts before `start` | Kept when that bucket still overlaps `[start, end)` (e.g. `start` mid-minute with `1m`, or midday `start` with a local `1d`). It appears in `datapoints` and participates in later windows. |
+| Bucket ends exactly at `start` | Not on the grid (`[start, end)`). |
+| Second series missing at a filled gap | `{A}` may still have a rolling value; `{A} - {B}` is `NaN` there and that index is dropped. `{A}`'s value at that bucket still sits in later windows. |
+| Constant in the formula | Broadcast onto the full grid, so `rolling_average({GQ}, 3) - {C}` keeps the filled minutes. |
+| `alignment: "intersect"` (default) | Fill **replaces** intersection. Series are not intersected first (that would throw away a value that only one series has, then put `NaN` on both sides). |
+| `alignment: "strict"` | Retrieved timestamps must already match or `ParameterTimestampError` is raised. Matching series are still expanded onto the calendar grid (shared holes become `NaN`). |
+| `timeZone` | Hour and longer grids follow that local calendar (DST, month length), same as CDF retrieve. Sub-hour grids are fixed UTC durations; `timeZone` does not change them. |
+| Lookback | Retrieve is still `[start, end]` only. The first `N - 1` result points are a warmup; pass an earlier `start` if you need a full window at the beginning of the range you care about. |
+
+Unknown function names, keyword arguments, starred arguments, and a non-constant or non-positive window still raise `InvalidFormulaError`.
 
 Put value-dependent guards **inside** the series argument. An outer `if` (or `and`/`or`) does not protect **neighbors in the window of a selected index**. A call that is never selected does not run. Indexes that do not select the call, and are not in a selected window, are not evaluated.
 
@@ -421,7 +511,7 @@ CalculatorError
 | `ParameterLengthError` | Referenced parameters don't all share the same length. Direct `evaluate()` calls raise this; `Calculator` aligns on timestamps before calling `evaluate`. |
 | `ParameterTimestampError` | A query with `alignment: "strict"` has time-series parameters that do not share the same timestamps at every index |
 | `MissingTimeAxisError` | A query has parameters but none of them are time-series parameters, so there are no timestamps to broadcast its constants onto |
-| `DatapointsRetrievalError` | Cognite returned datapoints the retriever cannot use (a short response, or non-numeric datapoints) |
+| `DatapointsRetrievalError` | Cognite returned datapoints the retriever cannot use (a short response, or non-numeric datapoints). An invalid `timeZone` is not wrapped — the Cognite SDK / API error is raised as-is. |
 
 Value-dependent arithmetic failures throw a subclass of `ArithmeticError` instead:
 
@@ -460,8 +550,8 @@ When every referenced parameter is an empty series, the result is an empty array
 | Member | Description |
 |---|---|
 | `new Calculator(cognite: CogniteClient)` | Create a calculator backed by a Cognite client |
-| `calculate(query, start, end): Promise<CalculationResult>` | Evaluate a single query over a time range |
-| `calculateMultiples(queries, start, end): Promise<CalculationResult[]>` | Evaluate several queries in one de-duplicated round trip |
+| `calculate(query, start, end, timeZone?): Promise<CalculationResult>` | Evaluate a single query over a time range. Optional `timeZone` aligns hour-and-longer aggregates to a local calendar. |
+| `calculateMultiples(queries, start, end, timeZone?): Promise<CalculationResult[]>` | Evaluate several queries in one de-duplicated round trip. The same `timeZone` applies to every aggregate in the batch. |
 
 ### Types
 
