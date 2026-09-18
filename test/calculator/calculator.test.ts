@@ -389,6 +389,40 @@ describe("Calculator.calculateMultiples", () => {
     expect(cognite.retrieveDatapoints).not.toHaveBeenCalled();
   });
 
+  it("forwards timeZone to every aggregate in the batch", async () => {
+    const { calculator, cognite } = makeCalculator([
+      makeAggregateSeries("sum", [[T0, 1]]),
+      makeAggregateSeries("sum", [[T0, 2]]),
+    ]);
+
+    await calculator.calculateMultiples(
+      [
+        query("{A}", [aggregateParam(TS_A, "A", "sum", "1d")]),
+        query("{B}", [aggregateParam(TS_B, "B", "sum", "1d")]),
+      ],
+      START,
+      END,
+      "America/New_York",
+    );
+
+    const items = requestItems(cognite);
+    expect(items.map((item) => item.timeZone)).toEqual(["America/New_York", "America/New_York"]);
+    expect(items[0]?.granularity).toBe("1d");
+  });
+
+  it("forwards timeZone on a single query", async () => {
+    const { calculator, cognite } = makeCalculator([makeAggregateSeries("sum", [[T0, 1]])]);
+
+    await calculator.calculate(
+      query("{A}", [aggregateParam(TS_A, "A", "sum", "1d")]),
+      START,
+      END,
+      "UTC+05:30",
+    );
+
+    expect(requestItems(cognite)[0]?.timeZone).toBe("UTC+05:30");
+  });
+
   it("multi parameter query", async () => {
     const { calculator } = makeCalculator([
       makeSeries([
