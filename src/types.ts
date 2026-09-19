@@ -120,16 +120,13 @@ type SortInput<TModel> = {
 } & {
   externalId?: SortDirection;
   space?: SortDirection;
-  createdTime?: SortDirection;
-  deletedTime?: SortDirection;
-  lastUpdatedTime?: SortDirection;
 } & (ModelInstanceType<TModel> extends "edge"
-    ? {
-        startNode?: SortDirection;
-        endNode?: SortDirection;
-        type?: SortDirection;
-      }
-    : {});
+  ? {
+      startNode?: SortDirection;
+      endNode?: SortDirection;
+      type?: SortDirection;
+    }
+  : {});
 
 export type QueryOptions<
   TModel,
@@ -658,7 +655,6 @@ export type WhereInput<TModel> = {
   externalId?: InstanceStringFilters;
   space?: InstanceStringFilters;
   createdTime?: NumberFilters;
-  deletedTime?: NumberFilters;
   lastUpdatedTime?: NumberFilters;
 } & (ModelInstanceType<TModel> extends "edge"
     ? {

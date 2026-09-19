@@ -506,15 +506,11 @@ describe("QueryMapper", () => {
           externalId: { eq: "asset-1", prefix: "asset-" },
           space: { in: ["cdf_cdm", "my-space"] },
           createdTime: { gte: 1_700_000_000_000 },
-          deletedTime: { exists: false },
           lastUpdatedTime: { lt: 1_800_000_000_000 },
         },
         sort: {
           externalId: "ascending",
           space: "descending",
-          createdTime: "descending",
-          deletedTime: "ascending",
-          lastUpdatedTime: "ascending",
         },
       });
 
@@ -528,16 +524,12 @@ describe("QueryMapper", () => {
           { prefix: { property: ["node", "externalId"], value: "asset-" } },
           { in: { property: ["node", "space"], values: ["cdf_cdm", "my-space"] } },
           { range: { property: ["node", "createdTime"], gte: 1_700_000_000_000 } },
-          { not: { exists: { property: ["node", "deletedTime"] } } },
           { range: { property: ["node", "lastUpdatedTime"], lt: 1_800_000_000_000 } },
         ]),
       );
       expect(rootWith.sort).toEqual([
         { property: ["node", "externalId"], direction: "ascending", nullsFirst: false },
         { property: ["node", "space"], direction: "descending", nullsFirst: true },
-        { property: ["node", "createdTime"], direction: "descending", nullsFirst: true },
-        { property: ["node", "deletedTime"], direction: "ascending", nullsFirst: false },
-        { property: ["node", "lastUpdatedTime"], direction: "ascending", nullsFirst: false },
       ]);
     });
 
@@ -598,6 +590,29 @@ describe("QueryMapper", () => {
           filters: { space: { search: { query: "cdf" } } } as never,
         }),
       ).rejects.toThrow(/filters\.space: Unrecognized key: "search"/);
+    });
+
+    it("rejects unsupported instance intrinsic filters and sorts", async () => {
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          filters: { deletedTime: { exists: false } } as never,
+        }),
+      ).rejects.toThrow(/filters: Unrecognized key: "deletedTime"/);
+
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          sort: { createdTime: "ascending" } as never,
+        }),
+      ).rejects.toThrow(/sort: Unrecognized key: "createdTime"/);
+
+      await expect(
+        mapper.map<Asset>({
+          viewExternalId: "CogniteAsset",
+          sort: { lastUpdatedTime: "descending" } as never,
+        }),
+      ).rejects.toThrow(/sort: Unrecognized key: "lastUpdatedTime"/);
     });
 
     it("rejects search filters on non-text properties", async () => {

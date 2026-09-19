@@ -12,7 +12,6 @@ const NODE_PROPERTIES = new Set([
   "externalId",
   "space",
   "createdTime",
-  "deletedTime",
   "lastUpdatedTime",
 ]);
 const EDGE_PROPERTIES = new Set(["startNode", "endNode", "type"]);

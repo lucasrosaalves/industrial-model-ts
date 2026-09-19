@@ -59,19 +59,17 @@ describe("FilterMapper.map", () => {
       expect(result).toEqual([{ prefix: { property: nodeProp("space"), value: "cdf_" } }]);
     });
 
-    it("maps createdTime, deletedTime, and lastUpdatedTime to node refs", async () => {
+    it("maps createdTime and lastUpdatedTime to node refs", async () => {
       const mapper = makeMapper();
       const result = await mapper.map(
         {
           createdTime: { gte: 1_700_000_000_000 },
-          deletedTime: { exists: false },
           lastUpdatedTime: { lt: 1_800_000_000_000 },
         },
         FLAT_VIEW,
       );
       expect(result).toEqual([
         { range: { property: nodeProp("createdTime"), gte: 1_700_000_000_000 } },
-        { not: { exists: { property: nodeProp("deletedTime") } } },
         { range: { property: nodeProp("lastUpdatedTime"), lt: 1_800_000_000_000 } },
       ]);
     });
