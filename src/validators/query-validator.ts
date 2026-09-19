@@ -12,8 +12,9 @@ import {
 import { nodeIdSchema } from "../validation";
 
 const NODE_STRING_PROPERTIES = ["externalId", "space"] as const;
-const NODE_NUMBER_PROPERTIES = ["createdTime", "deletedTime", "lastUpdatedTime"] as const;
+const NODE_NUMBER_PROPERTIES = ["createdTime", "lastUpdatedTime"] as const;
 const NODE_PROPERTIES = new Set<string>([...NODE_STRING_PROPERTIES, ...NODE_NUMBER_PROPERTIES]);
+const NODE_SORT_PROPERTIES = ["externalId", "space"] as const;
 const EDGE_NODE_ID_PROPERTIES = ["startNode", "endNode", "type"] as const;
 const SORT_DIRECTION_SCHEMA = z.enum(["ascending", "descending"]);
 
@@ -448,7 +449,7 @@ export class QueryValidator {
   ): string[] {
     const shape: Record<string, z.ZodType> = {};
 
-    for (const property of NODE_PROPERTIES) {
+    for (const property of NODE_SORT_PROPERTIES) {
       shape[property] = SORT_DIRECTION_SCHEMA.optional();
     }
     for (const [name, property] of Object.entries(view.properties)) {

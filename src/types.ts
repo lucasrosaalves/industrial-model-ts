@@ -117,13 +117,16 @@ type SortInput<TModel> = {
     | NodeId
     ? K
     : never]?: SortDirection;
+} & {
+  externalId?: SortDirection;
+  space?: SortDirection;
 } & (ModelInstanceType<TModel> extends "edge"
-  ? {
-      startNode?: SortDirection;
-      endNode?: SortDirection;
-      type?: SortDirection;
-    }
-  : {});
+    ? {
+        startNode?: SortDirection;
+        endNode?: SortDirection;
+        type?: SortDirection;
+      }
+    : {});
 
 export type QueryOptions<
   TModel,
@@ -605,7 +608,9 @@ export type DateFilters = {
   exists?: boolean;
 };
 export type NodeIdFilters = { eq?: NodeId; in?: NodeId[]; exists?: boolean };
-export type SpaceFilters = { eq?: string; in?: string[]; exists?: boolean };
+/** Filters for instance string intrinsics (`externalId`, `space`). Search is not supported. */
+export type InstanceStringFilters = Omit<StringFilters, "search">;
+export type SpaceFilters = InstanceStringFilters;
 export type ListFilters<T> = {
   containsAny?: T[];
   containsAll?: T[];
@@ -646,6 +651,11 @@ export type WhereInput<TModel> = {
   NOT?: WhereInput<TModel> | WhereInput<TModel>[];
 } & {
   [K in keyof ModelProps<TModel> | RelationKeys<TModel>]?: QueryFilterValue<TModel, K>;
+} & {
+  externalId?: InstanceStringFilters;
+  space?: InstanceStringFilters;
+  createdTime?: NumberFilters;
+  lastUpdatedTime?: NumberFilters;
 } & (ModelInstanceType<TModel> extends "edge"
     ? {
         startNode?: NodeIdFilters;

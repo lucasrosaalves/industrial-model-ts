@@ -52,11 +52,19 @@ describe("query typing", () => {
       viewExternalId: "Cognite360ImageAnnotation",
       select: { confidence: true, polygon: true },
       filters: {
+        externalId: { eq: "annotation-1" },
+        space: { eq: "annotation-space" },
         startNode: { eq: { space: "object-space", externalId: "object-1" } },
         endNode: { in: [{ space: "image-space", externalId: "image-1" }] },
         type: { exists: true },
       },
-      sort: { startNode: "ascending", endNode: "descending", type: "ascending" },
+      sort: {
+        externalId: "ascending",
+        space: "descending",
+        startNode: "ascending",
+        endNode: "descending",
+        type: "ascending",
+      },
     });
 
     type Item = (typeof items)[number];
