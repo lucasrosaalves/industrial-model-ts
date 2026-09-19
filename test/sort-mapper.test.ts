@@ -36,13 +36,22 @@ describe("SortMapper", () => {
   });
 
   it("maps node-level properties", () => {
-    const result = mapper.map({ externalId: "descending" }, ASSET_VIEW);
-    expect(result).toEqual([
+    const result = mapper.map(
       {
-        property: ["node", "externalId"],
-        direction: "descending",
-        nullsFirst: true,
+        externalId: "descending",
+        space: "ascending",
+        createdTime: "descending",
+        deletedTime: "ascending",
+        lastUpdatedTime: "descending",
       },
+      ASSET_VIEW,
+    );
+    expect(result).toEqual([
+      { property: ["node", "externalId"], direction: "descending", nullsFirst: true },
+      { property: ["node", "space"], direction: "ascending", nullsFirst: false },
+      { property: ["node", "createdTime"], direction: "descending", nullsFirst: true },
+      { property: ["node", "deletedTime"], direction: "ascending", nullsFirst: false },
+      { property: ["node", "lastUpdatedTime"], direction: "descending", nullsFirst: true },
     ]);
   });
 

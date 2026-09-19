@@ -64,6 +64,11 @@ describe("public type contracts", () => {
             { tags: { containsAny: ["critical", "pump"] } },
             { tags: { search: { query: "critical" } } },
             { sourceCreatedTime: { gt: "2024-01-01T00:00:00.000Z" } },
+            { externalId: { eq: "asset-1", prefix: "asset-" } },
+            { space: { in: ["cdf_cdm", "my-space"] } },
+            { createdTime: { gte: 1_700_000_000_000 } },
+            { lastUpdatedTime: { lt: 1_800_000_000_000 } },
+            { deletedTime: { exists: false } },
           ],
           OR: [{ assetClass: { code: { eq: "PUMP" } } }, { description: { exists: false } }],
         },
@@ -72,6 +77,11 @@ describe("public type contracts", () => {
           score: "descending",
           parent: "ascending",
           sourceCreatedTime: "descending",
+          externalId: "ascending",
+          space: "descending",
+          createdTime: "descending",
+          lastUpdatedTime: "ascending",
+          deletedTime: "ascending",
         },
         limit: 25,
         cursor: null,
@@ -247,6 +257,26 @@ describe("public type contracts", () => {
         viewExternalId: "CogniteAsset",
         select: {
           children: true,
+        },
+      });
+
+      void query({
+        viewExternalId: "CogniteAsset",
+        filters: {
+          externalId: {
+            // @ts-expect-error search is not supported on instance string intrinsics
+            search: { query: "asset" },
+          },
+        },
+      });
+
+      void query({
+        viewExternalId: "CogniteAsset",
+        filters: {
+          space: {
+            // @ts-expect-error search is not supported on instance string intrinsics
+            search: { query: "cdf" },
+          },
         },
       });
 
