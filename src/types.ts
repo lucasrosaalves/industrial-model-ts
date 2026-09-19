@@ -121,12 +121,12 @@ type SortInput<TModel> = {
   externalId?: SortDirection;
   space?: SortDirection;
 } & (ModelInstanceType<TModel> extends "edge"
-  ? {
-      startNode?: SortDirection;
-      endNode?: SortDirection;
-      type?: SortDirection;
-    }
-  : {});
+    ? {
+        startNode?: SortDirection;
+        endNode?: SortDirection;
+        type?: SortDirection;
+      }
+    : {});
 
 export type QueryOptions<
   TModel,

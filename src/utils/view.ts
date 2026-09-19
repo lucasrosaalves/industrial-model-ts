@@ -8,12 +8,7 @@ import type {
   ViewReference,
 } from "../cognite";
 
-const NODE_PROPERTIES = new Set([
-  "externalId",
-  "space",
-  "createdTime",
-  "lastUpdatedTime",
-]);
+const NODE_PROPERTIES = new Set(["externalId", "space", "createdTime", "lastUpdatedTime"]);
 const EDGE_PROPERTIES = new Set(["startNode", "endNode", "type"]);
 
 export function getPropertyRef(
