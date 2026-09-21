@@ -38,11 +38,40 @@ describe("FilterMapper.map", () => {
     expect(await mapper.map({ name: null }, FLAT_VIEW)).toEqual([]);
   });
 
-  describe("node-level property (externalId)", () => {
-    it("resolves to [node, field] ref", async () => {
+  describe("node-level properties", () => {
+    it("maps externalId to [node, externalId]", async () => {
       const mapper = makeMapper();
       const result = await mapper.map({ externalId: { eq: "X" } }, FLAT_VIEW);
       expect(result).toEqual([{ equals: { property: nodeProp("externalId"), value: "X" } }]);
+    });
+
+    it("maps space to [node, space]", async () => {
+      const mapper = makeMapper();
+      const result = await mapper.map({ space: { in: ["cdf_cdm", "my-space"] } }, FLAT_VIEW);
+      expect(result).toEqual([
+        { in: { property: nodeProp("space"), values: ["cdf_cdm", "my-space"] } },
+      ]);
+    });
+
+    it("maps space prefix filters", async () => {
+      const mapper = makeMapper();
+      const result = await mapper.map({ space: { prefix: "cdf_" } }, FLAT_VIEW);
+      expect(result).toEqual([{ prefix: { property: nodeProp("space"), value: "cdf_" } }]);
+    });
+
+    it("maps createdTime and lastUpdatedTime to node refs", async () => {
+      const mapper = makeMapper();
+      const result = await mapper.map(
+        {
+          createdTime: { gte: 1_700_000_000_000 },
+          lastUpdatedTime: { lt: 1_800_000_000_000 },
+        },
+        FLAT_VIEW,
+      );
+      expect(result).toEqual([
+        { range: { property: nodeProp("createdTime"), gte: 1_700_000_000_000 } },
+        { range: { property: nodeProp("lastUpdatedTime"), lt: 1_800_000_000_000 } },
+      ]);
     });
   });
 
