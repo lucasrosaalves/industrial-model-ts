@@ -3,6 +3,12 @@ import { type CognitePort, createCogniteAdapter } from "../cognite";
 import { DatapointsRetriever } from "./datapoints-retrieval";
 import { evaluate, MissingTimeAxisError, ParameterTimestampError } from "./formula-expression";
 import {
+  buildBucketGrid,
+  expandSeriesOnGrid,
+  formulaUsesRollingAverage,
+  sharedAggregateGranularity,
+} from "./grid";
+import {
   type AlignmentMode,
   type AnyTimeSeriesParameter,
   type CalculationResult,
@@ -32,9 +38,19 @@ export class Calculator {
     this.retriever = new DatapointsRetriever(port);
   }
 
-  /** Evaluate a single query over the given time range. */
-  async calculate(query: CalculatorQuery, start: Date, end: Date): Promise<CalculationResult> {
-    const [result] = await this.calculateMultiples([query], start, end);
+  /**
+   * Evaluate a single query over the given time range.
+   *
+   * `timeZone` aligns hour-and-longer CDF aggregates to a local calendar;
+   * `start` / `end` stay UTC instants.
+   */
+  async calculate(
+    query: CalculatorQuery,
+    start: Date,
+    end: Date,
+    timeZone?: string,
+  ): Promise<CalculationResult> {
+    const [result] = await this.calculateMultiples([query], start, end, timeZone);
     // calculateMultiples returns one result per query, so this is always set.
     return result as CalculationResult;
   }
@@ -42,11 +58,18 @@ export class Calculator {
   /**
    * Evaluate several queries over the given time range, retrieving every
    * parameter's datapoints in a single de-duplicated round trip.
+   *
+   * `timeZone` is an IANA id or fixed offset (`America/New_York`,
+   * `UTC+05:30`) applied to every hour-and-longer aggregate in the
+   * batch. Omit it for UTC calendar buckets. `start` / `end` are
+   * not reinterpreted. Raw and sub-hour retrieves are unchanged.
+   * The value is forwarded to CDF; invalid ids fail on retrieve.
    */
   async calculateMultiples(
     queries: CalculatorQuery[],
     start: Date,
     end: Date,
+    timeZone?: string,
   ): Promise<CalculationResult[]> {
     validateCalculatorQueries(queries);
 
@@ -62,13 +85,22 @@ export class Calculator {
       timeSeriesParameters,
       start,
       end,
+      timeZone,
     );
 
     const results: CalculationResult[] = [];
     let offset = 0;
     queries.forEach((query, index) => {
       const count = timeSeriesCounts[index] as number;
-      results.push(this.calculateOne(query, leafSeriesByParameter.slice(offset, offset + count)));
+      results.push(
+        this.calculateOne(
+          query,
+          leafSeriesByParameter.slice(offset, offset + count),
+          start,
+          end,
+          timeZone,
+        ),
+      );
       offset += count;
     });
     return results;
@@ -77,6 +109,9 @@ export class Calculator {
   private calculateOne(
     query: CalculatorQuery,
     leafSeriesByParameter: Series[][],
+    start: Date,
+    end: Date,
+    timeZone?: string,
   ): CalculationResult {
     const aliases: string[] = [];
     let series: Series[] = [];
@@ -96,8 +131,9 @@ export class Calculator {
       throw new MissingTimeAxisError(query.parameters.map((parameter) => parameter.alias));
     }
 
-    series = this.alignSeries(query.alignment ?? "intersect", aliases, series);
-    const timestamps = (series[0] ?? []).map((point) => point.timestamp);
+    const filled = this.alignOrFillGrid(query, aliases, series, start, end, timeZone);
+    series = filled.series;
+    let timestamps = (series[0] ?? []).map((point) => point.timestamp);
 
     const valuesMap: Record<string, number[]> = {};
     aliases.forEach((alias, index) => {
@@ -109,7 +145,13 @@ export class Calculator {
       }
     }
 
-    const values = evaluate(query.formula, valuesMap);
+    let values = evaluate(query.formula, valuesMap);
+    if (filled.filled) {
+      const dropped = dropNanResults(timestamps, values, series);
+      timestamps = dropped.timestamps;
+      values = dropped.values;
+      series = dropped.series;
+    }
 
     const inputs: Record<string, Series> = {};
     aliases.forEach((alias, index) => {
@@ -142,6 +184,40 @@ export class Calculator {
     return leafSeries[0] ?? [];
   }
 
+  private alignOrFillGrid(
+    query: CalculatorQuery,
+    aliases: string[],
+    series: Series[],
+    start: Date,
+    end: Date,
+    timeZone: string | undefined,
+  ): { series: Series[]; filled: boolean } {
+    const timeSeriesParameters = query.parameters.filter(isTimeSeriesParameter);
+    const granularity = sharedAggregateGranularity(timeSeriesParameters);
+    if (
+      granularity !== undefined &&
+      series.length > 0 &&
+      series.every((item) => item.length > 0) &&
+      formulaUsesRollingAverage(query.formula)
+    ) {
+      const references = series.flatMap((item) => item.map((point) => point.timestamp));
+      const grid = buildBucketGrid(start, end, granularity, timeZone, references);
+      if (grid.length > 0) {
+        if (query.alignment === "strict") {
+          requireAlignedTimestamps(aliases, series);
+        }
+        return {
+          series: series.map((item) => expandSeriesOnGrid(item, grid)),
+          filled: true,
+        };
+      }
+    }
+    return {
+      series: this.alignSeries(query.alignment ?? "intersect", aliases, series),
+      filled: false,
+    };
+  }
+
   private alignSeries(mode: AlignmentMode, aliases: string[], series: Series[]): Series[] {
     if (mode === "strict") {
       requireAlignedTimestamps(aliases, series);
@@ -149,6 +225,19 @@ export class Calculator {
     }
     return this.seriesReducer.align(series);
   }
+}
+
+function dropNanResults(
+  timestamps: Date[],
+  values: number[],
+  series: Series[],
+): { timestamps: Date[]; values: number[]; series: Series[] } {
+  const keep = values.map((value) => !Number.isNaN(value));
+  return {
+    timestamps: timestamps.filter((_timestamp, index) => keep[index]),
+    values: values.filter((_value, index) => keep[index]),
+    series: series.map((item) => item.filter((_point, index) => keep[index])),
+  };
 }
 
 function requireAlignedTimestamps(aliases: string[], series: Series[]): void {

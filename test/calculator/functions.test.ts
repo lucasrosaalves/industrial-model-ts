@@ -29,6 +29,23 @@ describe("rolling_average", () => {
     expect(evaluate("rolling_average({A}, 3)", { A: [] })).toEqual([]);
   });
 
+  it("skips NaN holes in the window", () => {
+    const result = evaluate("rolling_average({A}, 3)", {
+      A: [10, 20, 30, Number.NaN, Number.NaN, 100],
+    });
+    expect(result).toHaveLength(6);
+    expect(result.slice(0, 5)).toEqual([10, 15, 20, 25, 30]);
+    expect(result[5]).toBe(100);
+  });
+
+  it("returns NaN when the window has no finite values", () => {
+    const result = evaluate("rolling_average({A}, 2)", { A: [Number.NaN, Number.NaN, 4] });
+    expect(result).toHaveLength(3);
+    expect(result[0]).toBeNaN();
+    expect(result[1]).toBeNaN();
+    expect(result[2]).toBe(4);
+  });
+
   it("returns the single point when the series has length 1", () => {
     expectClose(evaluate("rolling_average({A}, 24)", { A: [42] }), [42]);
   });

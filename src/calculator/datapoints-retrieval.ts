@@ -43,13 +43,17 @@ export class DatapointsRetriever {
    * it references, in that order. Combining a parameter's series (when it
    * references more than one) is the caller's responsibility — this class only
    * retrieves and parses data.
+   *
+   * `timeZone` is applied to every aggregate request in this retrieve
+   * and omitted from the query when unset.
    */
   async retrieveDatapoints(
     parameters: AnyTimeSeriesParameter[],
     start: Date,
     end: Date,
+    timeZone?: string,
   ): Promise<Series[][]> {
-    const { requests, indexMapping } = this.buildRequests(parameters);
+    const { requests, indexMapping } = this.buildRequests(parameters, timeZone);
 
     if (requests.length === 0) {
       return parameters.map(() => []);
@@ -82,7 +86,7 @@ export class DatapointsRetriever {
     );
   }
 
-  private buildRequests(parameters: AnyTimeSeriesParameter[]): BuiltRequests {
+  private buildRequests(parameters: AnyTimeSeriesParameter[], timeZone?: string): BuiltRequests {
     const rawRequestIndex = new Map<string, number>();
     const aggregateRequestIndex = new Map<string, number>();
     const requests: CogniteDatapointRetrieveItem[] = [];
@@ -116,6 +120,7 @@ export class DatapointsRetriever {
             externalId,
             aggregates: [parameter.aggregateType],
             granularity,
+            ...(timeZone !== undefined ? { timeZone } : {}),
           });
         } else {
           const entry = requests[requestIndex] as CogniteDatapointRetrieveItem;
