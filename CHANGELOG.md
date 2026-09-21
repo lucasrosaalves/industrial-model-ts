@@ -1,5 +1,11 @@
 # industrial-model
 
+## 0.21.0
+
+### Minor Changes
+
+- 1f6f1b5: Add optional `timeZone` on `calculate` / `calculateMultiples` so hour-and-longer CDF aggregates follow a local calendar, and fill a bucket grid when `rolling_average` runs over a uniform aggregate granularity.
+
 ## 0.20.1
 
 ### Patch Changes
