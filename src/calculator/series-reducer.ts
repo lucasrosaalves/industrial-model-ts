@@ -102,6 +102,20 @@ function* iterAlignedRows(prepared: Series[]): Generator<AlignedRow> {
   }
 }
 
+function shareTimestamps(prepared: Series[]): boolean {
+  const first = prepared[0] as Series;
+  return prepared
+    .slice(1)
+    .every(
+      (leaf) =>
+        leaf.length === first.length &&
+        leaf.every(
+          (point, index) =>
+            point.timestamp.getTime() === (first[index] as DataPoint).timestamp.getTime(),
+        ),
+    );
+}
+
 function reduceValues(values: number[], reducer: ReducerType): number {
   switch (reducer) {
     case "min": {
@@ -149,12 +163,29 @@ function sum(values: number[]): number {
  * the output does not depend on how many series the caller happened to supply.
  */
 export class SeriesReducer {
-  reduce(series: Series[], reducer: ReducerType): Series {
+  /**
+   * Combines several series into one on their common timestamps.
+   *
+   * With `fillValue`, combines on the union of their timestamps instead: a
+   * series without a point at a timestamp counts as `fillValue` there (`0`
+   * for a count summed across lines).
+   */
+  reduce(series: Series[], reducer: ReducerType, fillValue?: number): Series {
     if (series.length === 0) {
       return [];
     }
     if (series.length === 1) {
       return prepare([...(series[0] as Series)]);
+    }
+    if (fillValue !== undefined) {
+      const filled = this.alignFilled(series, new Array(series.length).fill(fillValue));
+      return (filled[0] as Series).map((point, index) => ({
+        timestamp: point.timestamp,
+        value: reduceValues(
+          filled.map((leaf) => (leaf[index] as DataPoint).value),
+          reducer,
+        ),
+      }));
     }
     if (series.some((leaf) => leaf.length === 0)) {
       return [];
@@ -187,6 +218,63 @@ export class SeriesReducer {
           value: row.values[index] as number,
         });
       }
+    }
+    return aligned;
+  }
+
+  /**
+   * Aligns on the union of timestamps, filling where a value is given.
+   *
+   * A timestamp is kept when every series without a fill value has a point
+   * there; a series with a fill value uses it where it has none. When every
+   * series has a fill value, the axis is the union of all their timestamps.
+   */
+  alignFilled(series: Series[], fillValues: ReadonlyArray<number | undefined>): Series[] {
+    if (fillValues.length !== series.length) {
+      throw new Error(`got ${fillValues.length} fill value(s) for ${series.length} series`);
+    }
+    if (series.length === 0) {
+      return [];
+    }
+
+    const prepared = series.map((leaf) => prepare([...leaf]));
+    if (shareTimestamps(prepared)) {
+      // Nothing to fill: the usual case for series on one minute grid.
+      return prepared;
+    }
+
+    const byTimestamp: Array<Map<number, number>> = prepared.map(
+      (leaf) => new Map(leaf.map((point) => [point.timestamp.getTime(), point.value])),
+    );
+    const required = byTimestamp.filter((_values, index) => fillValues[index] === undefined);
+    let axis: number[];
+    if (required.length > 0) {
+      // A kept timestamp is in every required series, so the smallest one
+      // holds every candidate.
+      let sparsest = required[0] as Map<number, number>;
+      for (const values of required) {
+        if (values.size < sparsest.size) {
+          sparsest = values;
+        }
+      }
+      axis = [...sparsest.keys()];
+    } else {
+      axis = [...new Set(byTimestamp.flatMap((values) => [...values.keys()]))];
+    }
+    axis.sort((left, right) => left - right);
+
+    const aligned: Series[] = series.map(() => []);
+    for (const time of axis) {
+      if (required.some((values) => !values.has(time))) {
+        continue;
+      }
+      const timestamp = new Date(time);
+      byTimestamp.forEach((values, index) => {
+        (aligned[index] as Series).push({
+          timestamp,
+          value: values.get(time) ?? (fillValues[index] as number),
+        });
+      });
     }
     return aligned;
   }

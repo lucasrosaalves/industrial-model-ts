@@ -1,4 +1,5 @@
 import { compileFormula } from "./compiler";
+import { InvalidFormulaError } from "./exceptions";
 import { evaluateCompiled } from "./runtime";
 import type { EvaluationResult, Parameters } from "./types";
 
@@ -41,7 +42,17 @@ import type { EvaluationResult, Parameters } from "./types";
  * on that index's window (including neighbors that would not have selected
  * the call). A call that is never selected, and indexes that are not in any
  * selected window, are not evaluated.
+ *
+ * A formula that calls ``sum(...)`` / ``average(...)`` aggregates into time
+ * buckets, which needs timestamps: it throws `InvalidFormulaError` here and
+ * is evaluated by `Calculator` instead.
  */
 export function evaluate(formula: string, parameters: Parameters = {}): EvaluationResult {
-  return evaluateCompiled(compileFormula(formula), parameters);
+  const compiled = compileFormula(formula);
+  if (compiled.bucketTerms.length > 0) {
+    throw new InvalidFormulaError(
+      "sum() / average() aggregate into time buckets; evaluate the formula with Calculator",
+    );
+  }
+  return evaluateCompiled(compiled, parameters);
 }

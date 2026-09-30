@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
-import { DatapointsRetriever } from "../../src/calculator/datapoints-retrieval";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { DatapointsRetriever, retrievalLimits } from "../../src/calculator/datapoints-retrieval";
 import { CalculatorError } from "../../src/calculator/exceptions";
 import type { AnyTimeSeriesParameter, MultiTimeSeriesParameter } from "../../src/calculator/models";
 import type { CognitePort } from "../../src/cognite";
@@ -464,7 +464,7 @@ describe("DatapointsRetriever: response parsing", () => {
       ],
     ]);
     expect(cognite.retrieveDatapoints).toHaveBeenCalledWith({
-      items: [{ space: TS_A.space, externalId: TS_A.externalId }],
+      items: [{ space: TS_A.space, externalId: TS_A.externalId, limit: 100_000 }],
       start: START,
       end: END,
     });
@@ -571,5 +571,148 @@ describe("DatapointsRetriever: pagination", () => {
       expect(call[0]?.start).toBe(START);
       expect(call[0]?.end).toBe(END);
     }
+  });
+});
+
+const HOUR = 60 * 60 * 1000;
+
+function hoursFrom(start: Date, count: number): Date[] {
+  return Array.from({ length: count }, (_, index) => new Date(start.getTime() + index * HOUR));
+}
+
+type FakeRequestItem = { externalId: string; start?: number; limit: number; granularity?: string };
+
+// A Cognite mock that pages like CDF: each item gets at most `limit` points
+// from its own `start` (or the request's), and aggregate starts are rounded
+// down to the hour, so re-asking from inside a bucket returns it again.
+function makePagedRetriever(timestampsBySeries: Record<string, Date[]>): {
+  retriever: DatapointsRetriever;
+  cognite: CognitePort;
+} {
+  const cognite = makeCogniteMock();
+  cognite.retrieveDatapoints = vi.fn().mockImplementation(({ items, start, end }) =>
+    Promise.resolve({
+      items: items.map((item: FakeRequestItem) => {
+        let from = item.start ?? (start as Date).getTime();
+        if (item.granularity !== undefined) {
+          from = Math.floor(from / HOUR) * HOUR;
+        }
+        const page = (timestampsBySeries[item.externalId] ?? [])
+          .filter(
+            (timestamp) =>
+              timestamp.getTime() >= from && timestamp.getTime() < (end as Date).getTime(),
+          )
+          .slice(0, item.limit);
+        return makeResultItem({
+          datapoints: page.map((timestamp) =>
+            item.granularity === undefined
+              ? { timestamp, value: timestamp.getTime() }
+              : { timestamp, sum: timestamp.getTime() },
+          ),
+        });
+      }),
+    }),
+  );
+  return { retriever: new DatapointsRetriever(cognite), cognite };
+}
+
+describe("DatapointsRetriever: page limits", () => {
+  const defaults = { ...retrievalLimits };
+  afterEach(() => {
+    Object.assign(retrievalLimits, defaults);
+  });
+
+  it("sends every item its share of the request's point budget, per kind", async () => {
+    retrievalLimits.aggregatePointsPerRequest = 10;
+    retrievalLimits.rawPointsPerRequest = 100;
+    const { retriever, cognite } = makePagedRetriever({});
+
+    await retriever.retrieveDatapoints(
+      [
+        aggregateParam(TS_A, "A", "sum"),
+        aggregateParam(TS_B, "B", "sum"),
+        rawParam({ space: "ts-space", externalId: "raw" }, "C"),
+      ],
+      START,
+      END,
+    );
+
+    expect(requestItems(cognite).map((item) => item.limit)).toEqual([5, 5, 100]);
+  });
+
+  it("asks again after a full raw page until the window is covered", async () => {
+    retrievalLimits.rawPointsPerRequest = 3;
+    const timestamps = hoursFrom(START, 8);
+    const { retriever, cognite } = makePagedRetriever({ [TS_A.externalId]: timestamps });
+
+    const result = await retriever.retrieveDatapoints([rawParam(TS_A, "A")], START, END);
+
+    expect(result[0]?.[0]).toEqual(
+      timestamps.map((timestamp) => ({ timestamp, value: timestamp.getTime() })),
+    );
+    expect(cognite.retrieveDatapoints).toHaveBeenCalledTimes(3);
+    expect(requestItems(cognite, 1)[0]?.start).toBe((timestamps[2] as Date).getTime() + 1);
+    expect(requestItems(cognite, 2)[0]?.start).toBe((timestamps[5] as Date).getTime() + 1);
+  });
+
+  it("drops the aggregate bucket CDF returns again after rounding start down", async () => {
+    retrievalLimits.aggregatePointsPerRequest = 4;
+    const timestamps = hoursFrom(START, 10);
+    const { retriever, cognite } = makePagedRetriever({ [TS_A.externalId]: timestamps });
+
+    const result = await retriever.retrieveDatapoints(
+      [aggregateParam(TS_A, "A", "sum")],
+      START,
+      END,
+    );
+    const series = result[0]?.[0] ?? [];
+
+    expect(series.map((point) => point.timestamp)).toEqual(timestamps);
+    // Pages of 4 new, then the repeated bucket + 3 new twice (still full),
+    // then only the repeated bucket: nothing new, so the series is done.
+    expect(cognite.retrieveDatapoints).toHaveBeenCalledTimes(4);
+  });
+
+  it("only asks again for series whose page was full", async () => {
+    retrievalLimits.rawPointsPerRequest = 4;
+    const long = hoursFrom(START, 5);
+    const { retriever, cognite } = makePagedRetriever({
+      [TS_A.externalId]: long,
+      [TS_B.externalId]: hoursFrom(START, 1),
+    });
+
+    const result = await retriever.retrieveDatapoints(
+      [rawParam(TS_A, "A"), rawParam(TS_B, "B")],
+      START,
+      END,
+    );
+
+    expect(result[0]?.[0]).toHaveLength(5);
+    expect(result[1]?.[0]).toHaveLength(1);
+    expect(cognite.retrieveDatapoints).toHaveBeenCalledTimes(2);
+    // Alone in the second request, A gets the whole budget.
+    expect(requestItems(cognite, 1)).toEqual([
+      expect.objectContaining({ externalId: TS_A.externalId, limit: 4 }),
+    ]);
+  });
+
+  it("stops when a full page brings nothing new", async () => {
+    retrievalLimits.rawPointsPerRequest = 2;
+    const { retriever, cognite } = makeRetriever([
+      makeResultItem({
+        datapoints: [
+          { timestamp: T0, value: 1 },
+          { timestamp: T1, value: 2 },
+        ],
+      }),
+    ]);
+
+    const result = await retriever.retrieveDatapoints([rawParam(TS_A, "A")], START, END);
+
+    expect(result[0]?.[0]).toEqual([
+      { timestamp: T0, value: 1 },
+      { timestamp: T1, value: 2 },
+    ]);
+    expect(cognite.retrieveDatapoints).toHaveBeenCalledTimes(2);
   });
 });

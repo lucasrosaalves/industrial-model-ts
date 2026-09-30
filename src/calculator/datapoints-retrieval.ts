@@ -2,7 +2,6 @@ import type {
   CogniteAggregateDatapoint,
   CogniteDatapointResultItem,
   CogniteDatapointRetrieveItem,
-  CogniteDatapointRetrieveOptions,
   CogniteNumericDatapoint,
   CognitePort,
 } from "../cognite";
@@ -11,11 +10,14 @@ import { chunks } from "../utils/array";
 import { DatapointsRetrievalError } from "./exceptions";
 import { type AnyTimeSeriesParameter, instanceIdsOf, type Series } from "./models";
 
-// Cognite's datapoints retrieve endpoint accepts at most 100 items per request.
-// Exposed so integration tests can shrink the chunk size without provisioning
-// 100+ series to prove responses stay in request order across chunks.
+// Cognite's datapoints retrieve endpoint accepts at most 100 items per request,
+// and returns at most 10_000 aggregate and 100_000 raw points per request,
+// shared by the items of each kind. Exposed so tests can shrink them without
+// provisioning 100+ series or 10_000+ points.
 export const retrievalLimits = {
   maxTimeSeriesPerRequest: 100,
+  aggregatePointsPerRequest: 10_000,
+  rawPointsPerRequest: 100_000,
 };
 
 type BuiltRequests = {
@@ -46,6 +48,11 @@ export class DatapointsRetriever {
    *
    * `timeZone` is applied to every aggregate request in this retrieve
    * and omitted from the query when unset.
+   *
+   * Every item is sent with an explicit `limit` (its share of the request's
+   * point budget). A series whose page is full is requested again from just
+   * after its last point until a page comes back short or brings nothing
+   * new, so a long window is never silently truncated to one page.
    */
   async retrieveDatapoints(
     parameters: AnyTimeSeriesParameter[],
@@ -60,18 +67,11 @@ export class DatapointsRetriever {
     }
 
     const responses = await Promise.all(
-      chunks(requests, retrievalLimits.maxTimeSeriesPerRequest).map(async (items) => {
-        const options: CogniteDatapointRetrieveOptions = { items, start, end };
-        const response = await this.cognite.retrieveDatapoints(options);
-        if (response.items.length !== items.length) {
-          throw new DatapointsRetrievalError(
-            `expected ${items.length} datapoint series from CDF, got ${response.items.length}`,
-          );
-        }
-        return response;
-      }),
+      chunks(requests, retrievalLimits.maxTimeSeriesPerRequest).map((items) =>
+        this.retrievePaged(items, start, end),
+      ),
     );
-    const items = responses.flatMap((response) => response.items);
+    const items = responses.flat();
 
     return parameters.map((parameter, index) =>
       (indexMapping[index] as number[]).map((requestIndex) => {
@@ -84,6 +84,58 @@ export class DatapointsRetriever {
         return parseDatapoints(item, parameter);
       }),
     );
+  }
+
+  /**
+   * Retrieves one chunk, asking again for every series whose page was full.
+   *
+   * CDF may round an advanced `start` down to the aggregate bucket that was
+   * already returned; {@link appendDatapoints} drops that overlap.
+   */
+  private async retrievePaged(
+    items: CogniteDatapointRetrieveItem[],
+    start: Date,
+    end: Date,
+  ): Promise<CogniteDatapointResultItem[]> {
+    const pending = [...items];
+    const merged: Array<CogniteDatapointResultItem | undefined> = items.map(() => undefined);
+    let open = items.map((_item, index) => index);
+
+    while (open.length > 0) {
+      const batch = withPageLimits(
+        open.map((index) => pending[index] as CogniteDatapointRetrieveItem),
+      );
+      const response = await this.cognite.retrieveDatapoints({ items: batch, start, end });
+      if (response.items.length !== batch.length) {
+        throw new DatapointsRetrievalError(
+          `expected ${batch.length} datapoint series from CDF, got ${response.items.length}`,
+        );
+      }
+
+      const stillOpen: number[] = [];
+      open.forEach((index, position) => {
+        const page = response.items[position] as CogniteDatapointResultItem;
+        let stored = merged[index];
+        if (stored === undefined) {
+          stored = blankResultItem(page);
+          merged[index] = stored;
+        }
+        const added = appendDatapoints(stored, page);
+        const limit = (batch[position] as CogniteDatapointRetrieveItem).limit as number;
+        if (added === 0 || page.datapoints.length < limit) {
+          return;
+        }
+        const last = stored.datapoints[stored.datapoints.length - 1] as CogniteNumericDatapoint;
+        pending[index] = {
+          ...(pending[index] as CogniteDatapointRetrieveItem),
+          start: last.timestamp.getTime() + 1,
+        };
+        stillOpen.push(index);
+      });
+      open = stillOpen;
+    }
+
+    return merged as CogniteDatapointResultItem[];
   }
 
   private buildRequests(parameters: AnyTimeSeriesParameter[], timeZone?: string): BuiltRequests {
@@ -137,6 +189,63 @@ export class DatapointsRetriever {
 
     return { requests, indexMapping };
   }
+}
+
+/**
+ * Gives every item its share of the request's point budget.
+ *
+ * Aggregate and raw items draw on separate budgets, split evenly among the
+ * items of each kind, so a page that comes back at `limit` may be truncated.
+ */
+function withPageLimits(items: CogniteDatapointRetrieveItem[]): CogniteDatapointRetrieveItem[] {
+  const aggregates = items.filter(isAggregateRequest).length;
+  const raws = items.length - aggregates;
+  const aggregateLimit = pageLimit(retrievalLimits.aggregatePointsPerRequest, aggregates);
+  const rawLimit = pageLimit(retrievalLimits.rawPointsPerRequest, raws);
+  return items.map((item) => ({
+    ...item,
+    limit: isAggregateRequest(item) ? aggregateLimit : rawLimit,
+  }));
+}
+
+function pageLimit(budget: number, count: number): number {
+  return Math.max(1, Math.floor(budget / Math.max(1, count)));
+}
+
+function isAggregateRequest(item: CogniteDatapointRetrieveItem): boolean {
+  return item.granularity !== undefined;
+}
+
+function blankResultItem(page: CogniteDatapointResultItem): CogniteDatapointResultItem {
+  const { nextCursor: _nextCursor, datapoints: _datapoints, ...rest } = page;
+  return { ...rest, datapoints: [] };
+}
+
+/**
+ * Appends the points of `page` that come after the last stored one.
+ *
+ * Returns how many were added; zero means the page brought nothing new.
+ */
+function appendDatapoints(
+  stored: CogniteDatapointResultItem,
+  page: CogniteDatapointResultItem,
+): number {
+  const incoming = page.datapoints;
+  const last = stored.datapoints[stored.datapoints.length - 1];
+  let first = 0;
+  if (last !== undefined) {
+    const cutoff = last.timestamp.getTime();
+    while (
+      first < incoming.length &&
+      (incoming[first] as CogniteNumericDatapoint).timestamp.getTime() <= cutoff
+    ) {
+      first += 1;
+    }
+  }
+  for (let index = first; index < incoming.length; index += 1) {
+    stored.datapoints.push(incoming[index] as CogniteNumericDatapoint);
+  }
+  return incoming.length - first;
 }
 
 /**

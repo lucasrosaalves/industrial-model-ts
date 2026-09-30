@@ -1,6 +1,8 @@
 export { Calculator } from "./calculator";
-export { CalculatorError, DatapointsRetrievalError } from "./exceptions";
+export { BucketGranularityError, CalculatorError, DatapointsRetrievalError } from "./exceptions";
 export type {
+  BucketAggregate,
+  BucketTerm,
   CompiledFormula,
   EvaluationResult,
   Parameters,

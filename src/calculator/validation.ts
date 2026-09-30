@@ -28,6 +28,8 @@ const timeSeriesFields = {
   alias: z.string(),
   aggregateType: aggregateSchema.optional(),
   granularity: z.string().optional(),
+  // z.number() rejects NaN and ±Infinity.
+  fillValue: z.number().optional(),
 };
 
 type GranularityCheckable = {
@@ -101,6 +103,7 @@ const querySchema = z
     formula: z.string(),
     parameters: z.array(parameterSchema),
     alignment: alignmentSchema.optional(),
+    bucketGranularity: z.string().optional(),
   })
   .superRefine((query, context) => {
     const seen = new Set<string>();
@@ -117,6 +120,21 @@ const querySchema = z
         message: `duplicate parameter alias(es): ${[...duplicates].sort().join(", ")}`,
         path: ["parameters"],
       });
+    }
+
+    if (query.alignment === "strict") {
+      const filled = query.parameters
+        .filter((parameter) => parameter.type !== "constant" && parameter.fillValue !== undefined)
+        .map((parameter) => parameter.alias);
+      if (filled.length > 0) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "fillValue needs alignment 'intersect'; strict alignment never fills: " +
+            filled.join(", "),
+          path: ["parameters"],
+        });
+      }
     }
   });
 

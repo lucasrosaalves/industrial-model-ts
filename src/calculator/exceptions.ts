@@ -19,3 +19,16 @@ export class DatapointsRetrievalError extends CalculatorError {
     this.name = "DatapointsRetrievalError";
   }
 }
+
+/**
+ * Raised when a query's `bucketGranularity` does not fit its formula.
+ *
+ * A `sum(...)` / `average(...)` formula needs a known `bucketGranularity`
+ * no finer than any aggregated parameter. Other formulas ignore it.
+ */
+export class BucketGranularityError extends CalculatorError {
+  constructor(message: string) {
+    super(message);
+    this.name = "BucketGranularityError";
+  }
+}

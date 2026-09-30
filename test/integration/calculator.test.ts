@@ -4,6 +4,7 @@ import { Calculator } from "../../src/calculator/calculator";
 import { retrievalLimits } from "../../src/calculator/datapoints-retrieval";
 import { ParameterTimestampError } from "../../src/calculator/formula-expression";
 import type {
+  CalculationResult,
   CalculatorQuery,
   MultiTimeSeriesParameter,
   ReducerType,
@@ -579,5 +580,97 @@ describeIntegration("integration calculator", () => {
     expect(aggregateResult?.datapoints[0]?.value).toBeCloseTo(50, -1);
     expect(aggregateResult?.datapoints[1]?.value).toBeCloseTo(70, -1);
     expect(values(reducerResult as { datapoints: Array<{ value: number }> })).toEqual([600, 630]);
+  });
+
+  it("small pages are followed until every series is complete", async () => {
+    // Shrink the point budgets so each series needs several pages: raw
+    // series get 2 points per page and the aggregate 2 buckets. For the
+    // aggregate, CDF rounds the advanced start down to the bucket already
+    // returned, which the retriever must drop rather than duplicate.
+    const queries: CalculatorQuery[] = [
+      {
+        formula: "{PRODUCED} - {SCRAP}",
+        parameters: [
+          { ...ts(dataset.space, "produced"), alias: "PRODUCED" },
+          { ...ts(dataset.space, "scrap"), alias: "SCRAP" },
+        ],
+      },
+      {
+        formula: "{TEMP}",
+        parameters: [
+          {
+            type: "single_timeseries",
+            alias: "TEMP",
+            timeSeries: dataset.temp,
+            aggregateType: "sum",
+            granularity: "1m",
+          },
+        ],
+      },
+    ];
+    const whole = await calculator.calculateMultiples(queries, WINDOW_START, WINDOW_END);
+
+    const previous = { ...retrievalLimits };
+    retrievalLimits.rawPointsPerRequest = 4;
+    retrievalLimits.aggregatePointsPerRequest = 2;
+    try {
+      const paged = await calculator.calculateMultiples(queries, WINDOW_START, WINDOW_END);
+
+      expect(values(whole[0] as CalculationResult)).toEqual([90, 110, 115, 110, 138]);
+      expect(whole[1]?.datapoints).toHaveLength(8);
+      expect(paged).toEqual(whole);
+    } finally {
+      Object.assign(retrievalLimits, previous);
+    }
+  });
+
+  // sum({X}) over per-minute sums, aggregated by the granularity, equals
+  // CDF's own sum aggregate, so any difference is a bucket boundary or
+  // window-span mismatch.
+  it.each([
+    // Mid-bucket start: CDF floors to the unit and returns whole buckets.
+    { granularity: "1h", timeZone: undefined, start: atMinutes(37) },
+    { granularity: "2h", timeZone: undefined, start: atMinutes(37) },
+    // Half-hour offset: local hours start at :30 UTC.
+    { granularity: "1h", timeZone: "UTC+05:30", start: WINDOW_START },
+    // 00:15Z / 01:15Z are 31 Dec in Denver; the day starts at 07:00Z.
+    { granularity: "1d", timeZone: "America/Denver", start: WINDOW_START },
+  ])("bucket sum matches the native CDF sum aggregate ($granularity, $timeZone)", async ({
+    granularity,
+    timeZone,
+    start,
+  }) => {
+    const query = (
+      formula: string,
+      fetch: string,
+      bucketGranularity: string | undefined,
+    ): CalculatorQuery => ({
+      formula,
+      parameters: [
+        {
+          type: "single_timeseries",
+          alias: "L1",
+          timeSeries: dataset.line_1,
+          aggregateType: "sum",
+          granularity: fetch,
+        },
+      ],
+      ...(bucketGranularity !== undefined ? { bucketGranularity } : {}),
+    });
+
+    const [native, bucketed] = (await calculator.calculateMultiples(
+      [query("{L1}", granularity, undefined), query("sum({L1})", "1m", granularity)],
+      start,
+      WINDOW_END,
+      timeZone,
+    )) as [CalculationResult, CalculationResult];
+
+    expect(native.datapoints.length).toBeGreaterThan(0);
+    expect(bucketed.datapoints.map((point) => point.timestamp)).toEqual(
+      native.datapoints.map((point) => point.timestamp),
+    );
+    bucketed.datapoints.forEach((point, index) => {
+      expect(point.value).toBeCloseTo(native.datapoints[index]?.value as number, 9);
+    });
   });
 });

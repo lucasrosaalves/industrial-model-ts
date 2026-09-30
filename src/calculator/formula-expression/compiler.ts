@@ -1,12 +1,14 @@
 import type { BinaryOp, BoolOpKind, CallNode, CompareOp, ExprNode, UnaryOp } from "./ast";
 import { treeHasConditional, walkExpr } from "./ast";
 import { ArithmeticError, InvalidFormulaError } from "./exceptions";
-import { ALLOWED_FUNCTIONS } from "./functions";
+import { ALLOWED_FUNCTIONS, BUCKET_AGGREGATES } from "./functions";
 import { BINARY_OPS, UNARY_OPS } from "./ops";
+import type { BucketAggregate } from "./types";
 
 const PLACEHOLDER_RE = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 const UNRESOLVED_BRACE_RE = /[{}]/;
 const SAFE_NAME_PREFIX = "__formula_expression_param_";
+const SAFE_BUCKET_PREFIX = "__formula_expression_bucket_";
 const CACHE_MAX_SIZE = 1024;
 
 /** A parsed, validated formula ready to be evaluated over parameter series. */
@@ -15,7 +17,12 @@ export type CompiledFormula = {
   readonly raw: string;
   /** The formula text after placeholders were replaced with safe identifiers. */
   readonly expression: string;
-  /** The validated expression tree. */
+  /**
+   * The validated expression tree. With `bucketTerms` set, this is the
+   * per-bucket formula: each `sum(...)` / `average(...)` call is replaced by
+   * its term's `key`, and `variables` / `nameMap` hold those keys next to
+   * the placeholders referenced outside any call.
+   */
   readonly tree: ExprNode;
   /** Original parameter names in first-appearance order. */
   readonly variables: readonly string[];
@@ -23,6 +30,22 @@ export type CompiledFormula = {
   readonly nameMap: ReadonlyMap<string, string>;
   /** Whether the formula needs element-by-element (short-circuiting) evaluation. */
   readonly hasConditional: boolean;
+  /** One entry per distinct `sum(...)` / `average(...)` call; empty otherwise. */
+  readonly bucketTerms: readonly BucketTerm[];
+};
+
+/**
+ * One `sum(...)` / `average(...)` call of a bucket formula.
+ *
+ * `formula` is the call's argument, which runs per aligned point; its
+ * results are aggregated into buckets by `aggregate`. The per-bucket formula
+ * reads those bucket values under `key`, which can never clash with a
+ * placeholder name.
+ */
+export type BucketTerm = {
+  readonly aggregate: BucketAggregate;
+  readonly key: string;
+  readonly formula: CompiledFormula;
 };
 
 const cache = new Map<string, CompiledFormula>();
@@ -86,11 +109,192 @@ function compileNormalized(raw: string): CompiledFormula {
 
   const parsed = parse(expression);
   validateTree(parsed, new Set(nameMap.values()));
-  const tree = foldConstants(parsed);
+  if (!containsCallTo(parsed, BUCKET_AGGREGATES)) {
+    return finish(raw, expression, parsed, nameMap);
+  }
+  return compileBucketFormula(raw, expression, parsed, nameMap);
+}
+
+function finish(
+  raw: string,
+  expression: string,
+  body: ExprNode,
+  nameMap: ReadonlyMap<string, string>,
+  bucketTerms: readonly BucketTerm[] = [],
+): CompiledFormula {
+  const tree = foldConstants(body);
   validateFoldedFunctionArgs(tree);
   const hasConditional = treeHasConditional(tree);
+  const variables = [...nameMap.keys()];
 
-  return { raw, expression, tree, variables, nameMap, hasConditional };
+  return { raw, expression, tree, variables, nameMap, hasConditional, bucketTerms };
+}
+
+/**
+ * Split a formula into per-point bucket terms and a per-bucket formula.
+ *
+ * Every `sum(...)` / `average(...)` call becomes a {@link BucketTerm} and is
+ * replaced by a name the per-bucket formula reads its bucket values by.
+ * Identical calls share one term.
+ */
+function compileBucketFormula(
+  raw: string,
+  expression: string,
+  parsed: ExprNode,
+  nameMap: ReadonlyMap<string, string>,
+): CompiledFormula {
+  const calls: Array<{ aggregate: BucketAggregate; argument: ExprNode }> = [];
+  const indexes = new Map<string, number>();
+  const body = extractBucketCalls(parsed, calls, indexes);
+  walkExpr(body, (node) => {
+    if (node.kind === "call" && Object.hasOwn(ALLOWED_FUNCTIONS, node.name)) {
+      throw new InvalidFormulaError(`${node.name}() cannot be combined with sum() / average() yet`);
+    }
+  });
+
+  const terms = calls.map(({ aggregate, argument }, index): BucketTerm => {
+    const termNames = namesUsedIn(argument, nameMap);
+    if (termNames.size === 0) {
+      throw new InvalidFormulaError(`${aggregate}() must reference at least one parameter`);
+    }
+    const perPoint = finish(raw, unparse(argument), argument, termNames);
+    return { aggregate, key: `${aggregate}#${index}`, formula: perPoint };
+  });
+
+  const outerNames = namesUsedIn(body, nameMap);
+  terms.forEach((term, index) => {
+    outerNames.set(term.key, `${SAFE_BUCKET_PREFIX}${index}`);
+  });
+  return finish(raw, expression, body, outerNames, terms);
+}
+
+/**
+ * Replace each `sum(...)` / `average(...)` call by a term name, recording
+ * the calls in `calls` (identical calls once, keyed in `indexes`). Children
+ * are visited in Python's `ast` field order so term indexes match the
+ * Python implementation.
+ */
+function extractBucketCalls(
+  node: ExprNode,
+  calls: Array<{ aggregate: BucketAggregate; argument: ExprNode }>,
+  indexes: Map<string, number>,
+): ExprNode {
+  const visit = (child: ExprNode) => extractBucketCalls(child, calls, indexes);
+  switch (node.kind) {
+    case "call": {
+      if (!BUCKET_AGGREGATES.has(node.name)) {
+        return { kind: "call", name: node.name, args: node.args.map(visit) };
+      }
+      const aggregate = node.name as BucketAggregate;
+      const argument = node.args[0] as ExprNode;
+      walkExpr(argument, (inner) => {
+        if (inner.kind !== "call") {
+          return;
+        }
+        if (BUCKET_AGGREGATES.has(inner.name)) {
+          throw new InvalidFormulaError("sum() and average() cannot be nested");
+        }
+        if (Object.hasOwn(ALLOWED_FUNCTIONS, inner.name)) {
+          throw new InvalidFormulaError(`${aggregate}() cannot wrap ${inner.name}() yet`);
+        }
+      });
+      const signature = `${aggregate}:${JSON.stringify(argument)}`;
+      let index = indexes.get(signature);
+      if (index === undefined) {
+        index = calls.length;
+        indexes.set(signature, index);
+        calls.push({ aggregate, argument });
+      }
+      return { kind: "name", id: `${SAFE_BUCKET_PREFIX}${index}` };
+    }
+    case "binop":
+      return { kind: "binop", op: node.op, left: visit(node.left), right: visit(node.right) };
+    case "unaryop":
+      return { kind: "unaryop", op: node.op, operand: visit(node.operand) };
+    case "ifexp":
+      return {
+        kind: "ifexp",
+        test: visit(node.test),
+        body: visit(node.body),
+        orelse: visit(node.orelse),
+      };
+    case "compare":
+      return {
+        kind: "compare",
+        left: visit(node.left),
+        ops: node.ops,
+        comparators: node.comparators.map(visit),
+      };
+    case "boolop":
+      return { kind: "boolop", op: node.op, values: node.values.map(visit) };
+    default:
+      return node;
+  }
+}
+
+function containsCallTo(tree: ExprNode, names: ReadonlySet<string>): boolean {
+  let found = false;
+  walkExpr(tree, (node) => {
+    if (node.kind === "call" && names.has(node.name)) {
+      found = true;
+    }
+  });
+  return found;
+}
+
+/** The entries of `nameMap` whose safe identifier appears in `tree`, in order. */
+function namesUsedIn(tree: ExprNode, nameMap: ReadonlyMap<string, string>): Map<string, string> {
+  const used = new Set<string>();
+  walkExpr(tree, (node) => {
+    if (node.kind === "name") {
+      used.add(node.id);
+    }
+  });
+  return new Map([...nameMap].filter(([, safe]) => used.has(safe)));
+}
+
+const BINARY_SYMBOLS: Record<BinaryOp, string> = {
+  add: "+",
+  sub: "-",
+  mul: "*",
+  div: "/",
+  pow: "**",
+  mod: "%",
+};
+
+const COMPARE_SYMBOLS: Record<CompareOp, string> = {
+  eq: "==",
+  ne: "!=",
+  lt: "<",
+  le: "<=",
+  gt: ">",
+  ge: ">=",
+};
+
+/** Formula text for a subtree, fully parenthesized. */
+function unparse(node: ExprNode): string {
+  switch (node.kind) {
+    case "name":
+      return node.id;
+    case "constant":
+      return String(node.value);
+    case "call":
+      return `${node.name}(${node.args.map(unparse).join(", ")})`;
+    case "binop":
+      return `(${unparse(node.left)} ${BINARY_SYMBOLS[node.op]} ${unparse(node.right)})`;
+    case "unaryop":
+      return `(${node.op === "neg" ? "-" : "+"}${unparse(node.operand)})`;
+    case "ifexp":
+      return `(${unparse(node.body)} if ${unparse(node.test)} else ${unparse(node.orelse)})`;
+    case "compare": {
+      const parts = node.ops.map(
+        (op, index) => `${COMPARE_SYMBOLS[op]} ${unparse(node.comparators[index] as ExprNode)}`,
+      );
+      return `(${unparse(node.left)} ${parts.join(" ")})`;
+    }
+    case "boolop":
+      return `(${node.values.map(unparse).join(` ${node.op} `)})`;
+  }
 }
 
 function replacePlaceholders(
@@ -118,12 +322,18 @@ function validateTree(tree: ExprNode, allowedNames: ReadonlySet<string>): void {
 }
 
 function validateCallShape(node: CallNode, hasKeywords: boolean, hasStarred: boolean): void {
-  const spec = ALLOWED_FUNCTIONS[node.name];
-  if (spec === undefined) {
-    if (node.name.startsWith(SAFE_NAME_PREFIX)) {
-      throw new InvalidFormulaError("unsupported formula element: Call");
+  let arity: number;
+  if (BUCKET_AGGREGATES.has(node.name)) {
+    arity = 1;
+  } else {
+    const spec = ALLOWED_FUNCTIONS[node.name];
+    if (spec === undefined) {
+      if (node.name.startsWith(SAFE_NAME_PREFIX)) {
+        throw new InvalidFormulaError("unsupported formula element: Call");
+      }
+      throw new InvalidFormulaError(`unknown formula function: ${node.name}`);
     }
-    throw new InvalidFormulaError(`unknown formula function: ${node.name}`);
+    arity = spec.arity;
   }
 
   if (hasKeywords) {
@@ -132,10 +342,9 @@ function validateCallShape(node: CallNode, hasKeywords: boolean, hasStarred: boo
   if (hasStarred) {
     throw new InvalidFormulaError(`${node.name}() does not accept starred arguments`);
   }
-  if (node.args.length !== spec.arity) {
-    throw new InvalidFormulaError(
-      `${node.name}() takes ${spec.arity} arguments, got ${node.args.length}`,
-    );
+  if (node.args.length !== arity) {
+    const noun = arity === 1 ? "argument" : "arguments";
+    throw new InvalidFormulaError(`${node.name}() takes ${arity} ${noun}, got ${node.args.length}`);
   }
 }
 

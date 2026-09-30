@@ -37,6 +37,12 @@ type TimeSeriesParameterBase = {
   aggregateType?: DatapointAggregate;
   /** Aggregate granularity (e.g. `"1h"`); required when `aggregateType` is set. */
   granularity?: string;
+  /**
+   * Value used at a timestamp where this series has no point but the query
+   * keeps the timestamp (`0` for a count). Omit it to drop that timestamp.
+   * Must be finite and needs `alignment: "intersect"`.
+   */
+  fillValue?: number;
 };
 
 /**
@@ -56,7 +62,8 @@ export type TimeSeriesParameter = TimeSeriesParameterBase & {
  *
  * The series are combined by intersecting on timestamp, so prefer
  * `aggregateType` + `granularity` here: raw datapoints from independent
- * series rarely share exact timestamps.
+ * series rarely share exact timestamps. With `fillValue`, they are combined
+ * on the union of their timestamps instead, each filled where it has no point.
  */
 export type MultiTimeSeriesParameter = TimeSeriesParameterBase & {
   type: "multi_timeseries";
@@ -81,6 +88,12 @@ export type CalculatorQuery = {
   parameters: CalculatorParameter[];
   /** How time-series parameters are joined on time; defaults to `"intersect"`. */
   alignment?: AlignmentMode;
+  /**
+   * Granularity the results of a `sum(...)` / `average(...)` formula are
+   * aggregated by, after it runs on the parameters as fetched. Required by
+   * those formulas and ignored by every other one.
+   */
+  bucketGranularity?: string;
 };
 
 /**
@@ -91,6 +104,10 @@ export type CalculatorQuery = {
  * series are already in memory at evaluation time (after retrieval, any
  * multi-series reduction, timestamp alignment, and constant broadcast), so
  * returning them does not refetch from CDF.
+ *
+ * For a `sum(...)` / `average(...)` formula, `inputs` holds the aligned
+ * points the formula ran on, before its results were aggregated into
+ * `datapoints`, so it is not index-aligned with `datapoints`.
  */
 export type CalculationResult = {
   query: CalculatorQuery;

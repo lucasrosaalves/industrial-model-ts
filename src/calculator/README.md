@@ -18,6 +18,7 @@ The formula engine that powers it (`evaluate`) is also exported on its own, so y
 - [The standalone formula engine](#the-standalone-formula-engine)
 - [Supported operators](#supported-operators)
 - [Rolling average](#rolling-average)
+- [Bucket aggregates: calculate, then aggregate](#bucket-aggregates-calculate-then-aggregate)
 - [Error handling](#error-handling)
 - [API reference](#api-reference)
 
@@ -183,6 +184,7 @@ If you only have one time series for a parameter, use `"single_timeseries"` inst
 - Series are combined by **intersecting on timestamp**: a timestamp survives into the reduced series only if *every* referenced time series has a value at that exact timestamp. This is stricter than a positional zip — it won't silently pair up unrelated points if one series has a gap the others don't.
 - Because of that, **use `aggregateType` + `granularity`** whenever you reduce multiple time series. Aggregated queries bucket every series onto the same aligned time grid, so timestamps line up; raw datapoints from independent series almost never share exact timestamps, and reducing raw series will typically collapse to an empty result.
 - If the referenced series have no timestamps in common at all, the parameter's series — and therefore the formula's result — is empty.
+- With `fillValue`, the series are combined on the **union** of their timestamps instead, each filled with `fillValue` where it has no point. For counts summed across lines (`reducer: "sum"`, `fillValue: 0`), a minute where only one line reported keeps that line's count instead of being dropped.
 - `reducer` is one of `"min"`, `"max"`, `"sum"`, `"average"`.
 
 ## Timestamp alignment
@@ -203,6 +205,27 @@ This is the same intersection rule used inside a multi-time-series parameter. Co
 // fail if A and B don't share the exact same timestamps
 { formula: "{A} + {B}", parameters: [paramA, paramB], alignment: "strict" }
 ```
+
+### Filling missing points
+
+A missing point is not always "unknown". For a count (good parts, throughput), a minute Cognite returns nothing for usually means zero, and intersecting would drop that minute from every other parameter too. Set `fillValue` on those parameters:
+
+- A parameter **without** `fillValue` still decides which timestamps exist: a timestamp is kept only when every such parameter has a point there.
+- A parameter **with** `fillValue` never removes a timestamp; where it has no point, the fill value is used (and appears in `inputs`).
+- When **every** time-series parameter has a `fillValue`, the axis is the union of all their timestamps.
+
+```ts
+// Keep every minute that has a nominal speed; a minute without throughput counts as 0.
+{
+  formula: "{TTP} / {NSP}",
+  parameters: [
+    { type: "single_timeseries", alias: "NSP", timeSeries: nsp, aggregateType: "average", granularity: "1m" },
+    { type: "single_timeseries", alias: "TTP", timeSeries: ttp, aggregateType: "sum", granularity: "1m", fillValue: 0 },
+  ],
+}
+```
+
+`fillValue` must be finite and needs `alignment: "intersect"`; `strict` never fills, so the combination is rejected by validation. On the `rolling_average` grid path a filled parameter's missing buckets use the fill value instead of `NaN`, so they count inside the window.
 
 ## Evaluating several queries at once
 
@@ -232,6 +255,10 @@ const [efficiency, downtime] = await calculator.calculateMultiples(
 ```
 
 If both queries happen to reference the same time series, it is still only fetched once — batching several KPI formulas for a shift report is a single network round trip regardless of how much overlap they have.
+
+A `sum(...)` / `average(...)` query is fetched over the whole buckets of its `bucketGranularity` (see [Bucket aggregates](#bucket-aggregates-calculate-then-aggregate)), so a batch retrieves once per distinct fetch window: bucket queries on the same `bucketGranularity` share one, and plain queries use the call's `[start, end)`. Windows are retrieved one after another, never concurrently.
+
+Each request asks Cognite for an explicit number of points per series (its share of the 10,000 aggregate / 100,000 raw points one request may return). A series whose page comes back full is asked for again from just after its last point, until a page is short or brings nothing new, so a long window is never silently cut to one page.
 
 ## Real-world example: OEE
 
@@ -358,6 +385,7 @@ clearCache();
 - **Boolean:** `and` `or`
 - **Conditional:** `{A} / {B} if {B} != 0 else 0`
 - **Functions:** `rolling_average(series, N)` — simple moving average of the last `N` aligned points (NaNs skipped); see [Rolling average](#rolling-average)
+- **Bucket aggregates:** `sum(expr)` / `average(expr)` — calculate `expr` per point, then aggregate by `bucketGranularity`; the rest of the formula runs per bucket (`sum({A}) / sum({B})`). `Calculator` only, see [Bucket aggregates](#bucket-aggregates-calculate-then-aggregate)
 
 Comparisons, boolean operators, and conditionals are evaluated element-by-element, and only the selected branch runs for a given element — so a value-dependent failure (like division by zero) in an unselected branch never throws:
 
@@ -421,7 +449,7 @@ All of these must hold:
 3. The formula contains a `rolling_average(...)` call (nested is fine).
 4. A bucket grid can be built.
 
-Then each series is expanded onto every bucket that **overlaps** `[start, end)`. Missing buckets become `NaN` in `inputs` and are skipped inside the window, so `rolling_average({GQ}, 3)` on minute sums is “last 3 minutes that have data.” After evaluation, timestamps whose **formula** result is `NaN` are omitted from `datapoints` and `inputs`.
+Then each series is expanded onto every bucket that **overlaps** `[start, end)`. Missing buckets become `NaN` (or the parameter's `fillValue`) in `inputs` and are skipped inside the window, so `rolling_average({GQ}, 3)` on minute sums is “last 3 minutes that have data.” After evaluation, timestamps whose **formula** result is `NaN` are omitted from `datapoints` and `inputs`.
 
 Same data as above, `granularity: "1m"`, window `[t0, t9)`:
 
@@ -487,12 +515,89 @@ evaluate("rolling_average({TEMP}, 24) - {SETPOINT}", {
 // [100, 105, 110, 115]
 ```
 
+## Bucket aggregates: calculate, then aggregate
+
+A formula over aggregated parameters is evaluated **per output bucket**: Cognite aggregates each parameter to the granularity first, and the formula runs on those totals. That is right for linear formulas (`{GQ} + {SQ}`), and wrong whenever a bucket's parameters vary inside it and the formula multiplies or divides them. OEE Speed Losses Time is the usual example:
+
+```text
+(({NSP} * {RUNT}) - {TTP}) / {NSP}
+```
+
+With a product change on the half hour (nominal speed 10 then 20 units/min, running the whole hour, 8 units/min produced), the hourly answer is 24 minutes, but aggregating first gives `(15 * 60 - 480) / 15 = 28`.
+
+Wrap the formula in `sum(...)` or `average(...)` and set `bucketGranularity` on the query to calculate on the parameters **as you fetch them** and then aggregate the results by that granularity:
+
+```ts
+const result = await calculator.calculate(
+  {
+    formula: "sum((({NSP} * {RUNT}) - {TTP}) / {NSP})",
+    parameters: [
+      { type: "single_timeseries", alias: "NSP", timeSeries: nsp, aggregateType: "average", granularity: "1m" },
+      { type: "single_timeseries", alias: "RUNT", timeSeries: runt, aggregateType: "sum", granularity: "1m", fillValue: 0 },
+      { type: "single_timeseries", alias: "TTP", timeSeries: ttp, aggregateType: "sum", granularity: "1m", fillValue: 0 },
+    ],
+    bucketGranularity: "1h",
+  },
+  start,
+  end,
+  "America/Denver",
+);
+// result.datapoints: one point per hour, the sum of the per-minute values
+// result.inputs:     the per-minute aligned inputs the formula ran on
+```
+
+How it runs:
+
+1. Parameters are fetched **exactly as declared**, aggregated or raw, as for any query. Here each is a `1m` aggregate with its own `aggregateType` (`average` for a speed, `sum` for a count).
+2. Parameters are aligned (`intersect`, honoring `fillValue`), and the expression inside `sum(...)` runs once per aligned point. `if` / `else` guards work per point, so `sum({TTP} / {NSP} if {NSP} != 0 else 0)` is safe.
+3. Results are grouped into `bucketGranularity` buckets and summed or averaged (`average` is the mean of the points that have a value). `NaN` results are skipped; a bucket with no value is omitted, as Cognite omits empty buckets.
+
+### Formulas over bucket totals
+
+`sum(...)` / `average(...)` can appear anywhere in a formula, any number of times. Each call runs per point and is aggregated into buckets as above; the rest of the formula then runs **once per bucket** on those totals. That is how you write a ratio of totals, such as OEE Performance:
+
+```ts
+{
+  formula: "sum({TTP}) / sum({NSP} * {RUNT}) if sum({NSP} * {RUNT}) != 0 else 0",
+  parameters: [/* NSP, RUNT, TTP as above */],
+  bucketGranularity: "1h",
+}
+// hourly: 480 produced / (30 * 10 + 30 * 20) possible = 0.533
+```
+
+This is not the same as `average({TTP} / ({NSP} * {RUNT}))`, which weighs every minute equally and gives `(30 * 0.8 + 30 * 0.4) / 60 = 0.6`. Pick the one that matches the KPI's definition.
+
+- Identical calls (`sum({NSP} * {RUNT})` above) are calculated once.
+- Outside `sum(...)` / `average(...)` the formula has no per-point values, so a time-series parameter there is rejected with `InvalidFormulaError` (`sum({TTP}) / {NSP}`). Constant parameters are fine (`100 * sum({A}) / {TARGET}`).
+- A bucket is returned only when every call has a value in it, and a `NaN` result is dropped. `if` / `else` guards run per bucket, so guard a division by a bucket total there.
+
+**Output buckets match Cognite's own.** The fetch window is widened to the whole `bucketGranularity` buckets Cognite would return for `[start, end)` with the same `timeZone`, so `sum({X})` over `1m` sums with `bucketGranularity: "1d"` equals Cognite's native `1d` `sum` of `{X}`, including timestamps:
+
+| Granularity | First bucket for a start inside it |
+|---|---|
+| `s`, `m` (any multiple) | Floored to the UTC second / minute; `timeZone` is ignored. `15m` from 13:37 starts at 13:37. |
+| `h` (any multiple) | Floored to the local hour. `2h` from 13:37 starts at 13:00, not 12:00. Hours are fixed durations, so a fall-back day has 25. |
+| `d`, `w` | Local midnight of the start day. `7d` / `1w` start on that day, not on a Monday. 23 / 25 h DST days follow the wall clock. |
+| `mo`, `q`, `y` | Local midnight on the 1st of the start month. `3mo` / `1q` / `1y` do not snap to a calendar quarter or year. |
+
+The last bucket that starts before `end` is returned whole, and every bucket holds all of its data, including data outside `[start, end)`. An empty window returns nothing.
+
+Rules and limits:
+
+- `sum` / `average` cannot be nested (`sum(average({A}))`), must reference at least one parameter, and cannot be combined with `rolling_average` yet, inside or outside them.
+- `bucketGranularity` is required with `sum(...)` / `average(...)` and ignored without them. It must be a known granularity no finer than any aggregated parameter (`1d` parameters into `1h` buckets is rejected). All of this throws `BucketGranularityError` before anything is fetched.
+- Parameters must share timestamps to be calculated together, exactly as for any query. Aggregates on one granularity do; raw series from different sources rarely do. Pick a parameter granularity that nests in every bucket: `1m` always does.
+- Constants are broadcast per point (`sum({RUNT} * {SECONDS})`).
+- `evaluate()` has no timestamps and rejects these formulas with `InvalidFormulaError`.
+- Cost follows the parameters' granularity, not the bucket: `1m` parameters are 1,440 points per series per day, ~525k per year.
+
 ## Error handling
 
 Every exception the package raises derives from `CalculatorError`, so `catch (error) { if (error instanceof CalculatorError) … }` catches the lot. `ArithmeticError` is deliberately **not** a `CalculatorError` — it depends on the data, not the formula.
 
 ```
 CalculatorError
+├── BucketGranularityError
 ├── DatapointsRetrievalError
 └── FormulaError
     ├── InvalidFormulaError
@@ -505,13 +610,14 @@ CalculatorError
 
 | Error | Raised when |
 |---|---|
-| `InvalidFormulaError` | The formula has invalid syntax, uses an unsupported operation, or calls an unknown function (including a non-constant or non-positive `rolling_average` window) |
+| `InvalidFormulaError` | The formula has invalid syntax, uses an unsupported operation, or calls an unknown function (including a non-constant or non-positive `rolling_average` window). Also a nested `sum(...)` / `average(...)`, one without a parameter, one combined with `rolling_average`, any passed to `evaluate()`, and (from `Calculator`) a time-series parameter used outside them. |
 | `MissingParameterError` | The formula references a `{alias}` that wasn't provided in `parameters` |
 | `ParameterError` | A parameter value is not a valid numeric sequence |
 | `ParameterLengthError` | Referenced parameters don't all share the same length. Direct `evaluate()` calls raise this; `Calculator` aligns on timestamps before calling `evaluate`. |
 | `ParameterTimestampError` | A query with `alignment: "strict"` has time-series parameters that do not share the same timestamps at every index |
 | `MissingTimeAxisError` | A query has parameters but none of them are time-series parameters, so there are no timestamps to broadcast its constants onto |
 | `DatapointsRetrievalError` | Cognite returned datapoints the retriever cannot use (a short response, or non-numeric datapoints). An invalid `timeZone` is not wrapped — the Cognite SDK / API error is raised as-is. |
+| `BucketGranularityError` | A `sum(...)` / `average(...)` query has no `bucketGranularity`, an unknown one, or one finer than an aggregated parameter. Thrown before any retrieve; a plain formula ignores `bucketGranularity`. |
 
 Value-dependent arithmetic failures throw a subclass of `ArithmeticError` instead:
 
@@ -557,21 +663,21 @@ When every referenced parameter is an empty series, the result is an empty array
 
 | Type | Description |
 |---|---|
-| `CalculatorQuery` | `{ formula: string; parameters: CalculatorParameter[]; alignment?: AlignmentMode }` |
+| `CalculatorQuery` | `{ formula: string; parameters: CalculatorParameter[]; alignment?: AlignmentMode; bucketGranularity?: string }`. `bucketGranularity` is the granularity a `sum(...)` / `average(...)` formula aggregates by: required by those formulas, ignored by any other. |
 | `CalculatorParameter` | Discriminated union of `ConstantParameter`, `TimeSeriesParameter`, `MultiTimeSeriesParameter` |
 | `ConstantParameter` | `{ type: "constant"; alias: string; value: number }` |
-| `TimeSeriesParameter` | `{ type: "single_timeseries"; timeSeries: NodeId; alias: string; aggregateType?: DatapointAggregate; granularity?: string }` |
-| `MultiTimeSeriesParameter` | `{ type: "multi_timeseries"; timeSeries: NodeId[]; alias: string; reducer: ReducerType; aggregateType?: DatapointAggregate; granularity?: string }` |
+| `TimeSeriesParameter` | `{ type: "single_timeseries"; timeSeries: NodeId; alias: string; aggregateType?: DatapointAggregate; granularity?: string; fillValue?: number }` |
+| `MultiTimeSeriesParameter` | `{ type: "multi_timeseries"; timeSeries: NodeId[]; alias: string; reducer: ReducerType; aggregateType?: DatapointAggregate; granularity?: string; fillValue?: number }` |
 | `ReducerType` | `"min" \| "max" \| "sum" \| "average"` |
 | `AlignmentMode` | `"intersect" \| "strict"` |
-| `CalculationResult` | `{ query: CalculatorQuery; datapoints: DataPoint[]; inputs: Record<string, DataPoint[]> }`. `query` is the originating query; `datapoints` has one `DataPoint` per aligned index; `inputs` is the aligned parameter series the formula evaluated (`inputs[alias][i]` was used to compute `datapoints[i]`). |
+| `CalculationResult` | `{ query: CalculatorQuery; datapoints: DataPoint[]; inputs: Record<string, DataPoint[]> }`. `query` is the originating query; `datapoints` has one `DataPoint` per aligned index; `inputs` is the aligned parameter series the formula evaluated (`inputs[alias][i]` was used to compute `datapoints[i]`). For a `sum(...)` / `average(...)` formula, `inputs` holds the aligned points the formula ran on, before its results were aggregated into `datapoints`, so it is not index-aligned with `datapoints`. |
 | `DataPoint` | `{ timestamp: Date; value: number }`. Used both for the formula result (`datapoints`) and for each aligned input series. |
 
 ### Validation
 
 | Export | Description |
 |---|---|
-| `validateCalculatorQuery(query)` | Rejects a query the calculator cannot evaluate (duplicate aliases, missing `type`, aggregate without granularity, …) |
+| `validateCalculatorQuery(query)` | Rejects a query the calculator cannot evaluate (duplicate aliases, missing `type`, aggregate without granularity, non-finite `fillValue`, `fillValue` with `alignment: "strict"`, …) |
 | `validateCalculatorQueries(queries)` | Same checks across a batch, reporting every problem |
 
 ### Formula engine
