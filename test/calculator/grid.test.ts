@@ -31,11 +31,36 @@ describe("parseGranularity", () => {
     expect(parseGranularity("1mo")).toEqual({ quantity: 1, unit: "mo" });
     expect(parseGranularity("2hours")).toEqual({ quantity: 2, unit: "h" });
     expect(parseGranularity("1day")).toEqual({ quantity: 1, unit: "d" });
+    expect(parseGranularity("1q")).toEqual({ quantity: 1, unit: "q" });
+    expect(parseGranularity("2quarters")).toEqual({ quantity: 2, unit: "q" });
+    expect(parseGranularity("1y")).toEqual({ quantity: 1, unit: "y" });
+    expect(parseGranularity("3t")).toEqual({ quantity: 3, unit: "m" });
   });
 
   it("rejects unknown granularities", () => {
-    expect(parseGranularity("1q")).toBeUndefined();
+    expect(parseGranularity("1fortnight")).toBeUndefined();
     expect(parseGranularity("")).toBeUndefined();
+  });
+});
+
+describe("buildBucketGrid: calendar units", () => {
+  it("steps quarters and years by calendar months", () => {
+    const start = new Date("2024-01-01T00:00:00.000Z");
+    expect(
+      buildBucketGrid(start, new Date("2025-01-01T00:00:00.000Z"), "1q", undefined, [start]),
+    ).toEqual([
+      new Date("2024-01-01T00:00:00.000Z"),
+      new Date("2024-04-01T00:00:00.000Z"),
+      new Date("2024-07-01T00:00:00.000Z"),
+      new Date("2024-10-01T00:00:00.000Z"),
+    ]);
+    expect(
+      buildBucketGrid(start, new Date("2027-01-01T00:00:00.000Z"), "1y", undefined, [start]),
+    ).toEqual([
+      new Date("2024-01-01T00:00:00.000Z"),
+      new Date("2025-01-01T00:00:00.000Z"),
+      new Date("2026-01-01T00:00:00.000Z"),
+    ]);
   });
 });
 
@@ -132,5 +157,19 @@ describe("expandSeriesOnGrid", () => {
     expect(filled[1]?.timestamp).toEqual(grid[1]);
     expect(filled[1]?.value).toBeNaN();
     expect(filled[2]).toEqual({ timestamp: grid[2], value: 30 });
+  });
+});
+
+describe("expandSeriesOnGrid: fill value", () => {
+  it("uses the fill value for missing buckets", () => {
+    const start = atUtc("2024-01-01T00:00:00.000Z");
+    const grid = [start, new Date(start.getTime() + 60_000)];
+
+    const filled = expandSeriesOnGrid([{ timestamp: start, value: 10 }], grid, 0);
+
+    expect(filled).toEqual([
+      { timestamp: start, value: 10 },
+      { timestamp: grid[1], value: 0 },
+    ]);
   });
 });

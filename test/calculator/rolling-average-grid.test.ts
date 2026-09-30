@@ -271,3 +271,31 @@ describe("Calculator rolling average grid fill", () => {
     expect(result.datapoints.map((point) => point.timestamp)).toEqual(timestamps);
   });
 });
+
+describe("Calculator rolling average grid fill: fillValue", () => {
+  it("uses the fill value for missing minutes", async () => {
+    const end = minutesAfter(9);
+    const series = makeAggregateSeries(
+      gapTimestamps().map((timestamp, index) => {
+        const values = [10, 20, 30, 100, 110, 120];
+        return [timestamp, values[index] as number];
+      }),
+    );
+
+    const result = await makeCalculator([series]).calculate(
+      query("rolling_average({GQ}, 3)", [{ ...param("GQ", "ts1", "1m"), fillValue: 0 }]),
+      START,
+      end,
+    );
+
+    // Minutes 3-5 count as zeros inside the window instead of being skipped.
+    expect(result.datapoints.map((point) => point.timestamp)).toEqual(
+      [0, 1, 2, 3, 4, 5, 6, 7, 8].map(minutesAfter),
+    );
+    const expected = [10, 15, 20, 50 / 3, 10, 0, 100 / 3, 70, 110];
+    result.datapoints.forEach((point, index) => {
+      expect(point.value).toBeCloseTo(expected[index] as number, 9);
+    });
+    expect(result.inputs.GQ?.map((point) => point.value).slice(3, 6)).toEqual([0, 0, 0]);
+  });
+});

@@ -15,6 +15,7 @@ import * as calculator from "../../src/calculator";
 
 const EXPECTED_RUNTIME_EXPORTS = [
   "ArithmeticError",
+  "BucketGranularityError",
   "Calculator",
   "CalculatorError",
   "DatapointsRetrievalError",

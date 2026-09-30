@@ -267,3 +267,115 @@ describe("SeriesReducer.align", () => {
     expect(seriesB).toEqual(originalB);
   });
 });
+
+describe("SeriesReducer: reduce with a fill value", () => {
+  it("combines on the union of timestamps", () => {
+    const reducer = new SeriesReducer();
+    const lineA = series([T0, 5], [T1, 5], [T2, 5]);
+    const lineB = series([T0, 3], [T2, 3]);
+
+    const result = reducer.reduce([lineA, lineB], "sum", 0);
+
+    // T1 keeps line A's count instead of being dropped.
+    expect(result).toEqual(series([T0, 8], [T1, 5], [T2, 8]));
+  });
+
+  it("keeps a series when another is empty", () => {
+    const reducer = new SeriesReducer();
+    const lineA = series([T0, 5], [T1, 5]);
+
+    expect(reducer.reduce([lineA, []], "sum", 0)).toEqual(lineA);
+  });
+
+  it("fills before reducing", () => {
+    const reducer = new SeriesReducer();
+    const a = series([T0, 4], [T1, 6]);
+    const b = series([T1, 2]);
+
+    expect(reducer.reduce([a, b], "average", 0)).toEqual(series([T0, 2], [T1, 4]));
+    expect(reducer.reduce([a, b], "min", -1)).toEqual(series([T0, -1], [T1, 2]));
+  });
+
+  it("empty series reduce to an empty series", () => {
+    expect(new SeriesReducer().reduce([[], []], "sum", 0)).toEqual([]);
+  });
+});
+
+describe("SeriesReducer: alignFilled", () => {
+  it("fills a series missing a required timestamp", () => {
+    const reducer = new SeriesReducer();
+    const required = series([T0, 10], [T1, 20], [T2, 30]);
+    const counts = series([T1, 5]);
+
+    const aligned = reducer.alignFilled([required, counts], [undefined, 0]);
+
+    expect(aligned).toEqual([
+      series([T0, 10], [T1, 20], [T2, 30]),
+      series([T0, 0], [T1, 5], [T2, 0]),
+    ]);
+  });
+
+  it("never adds a timestamp a required series lacks", () => {
+    const reducer = new SeriesReducer();
+    const required = series([T1, 20]);
+    const counts = series([T0, 1], [T1, 2], [T2, 3]);
+
+    const aligned = reducer.alignFilled([required, counts], [undefined, 0]);
+
+    expect(aligned).toEqual([series([T1, 20]), series([T1, 2])]);
+  });
+
+  it("intersects required series", () => {
+    const reducer = new SeriesReducer();
+    const a = series([T0, 1], [T1, 2]);
+    const b = series([T1, 3], [T2, 4]);
+    const c = series();
+
+    const aligned = reducer.alignFilled([a, b, c], [undefined, undefined, 9]);
+
+    expect(aligned).toEqual([series([T1, 2]), series([T1, 3]), series([T1, 9])]);
+  });
+
+  it("uses the union when every series fills", () => {
+    const reducer = new SeriesReducer();
+    const a = series([T2, 1], [T0, 2]);
+    const b = series([T1, 3]);
+
+    const aligned = reducer.alignFilled([a, b], [0, -1]);
+
+    expect(aligned).toEqual([
+      series([T0, 2], [T1, 0], [T2, 1]),
+      series([T0, -1], [T1, 3], [T2, -1]),
+    ]);
+  });
+
+  it("an empty required series aligns to empty", () => {
+    const reducer = new SeriesReducer();
+
+    const aligned = reducer.alignFilled([series(), series([T0, 1])], [undefined, 0]);
+
+    expect(aligned).toEqual([[], []]);
+  });
+
+  it("keeps the last value of a duplicate timestamp", () => {
+    const reducer = new SeriesReducer();
+
+    const aligned = reducer.alignFilled([series([T0, 1], [T0, 2]), series()], [undefined, 0]);
+
+    expect(aligned).toEqual([series([T0, 2]), series([T0, 0])]);
+  });
+
+  it("rejects mismatched fill values", () => {
+    const reducer = new SeriesReducer();
+
+    expect(() => reducer.alignFilled([series([T0, 1])], [])).toThrow(/fill value/);
+  });
+
+  it("returns series that already share timestamps", () => {
+    const reducer = new SeriesReducer();
+    const a = series([T0, 1], [T1, 2]);
+    const b = series([T0, 3], [T1, 4]);
+
+    expect(reducer.alignFilled([a, b], [undefined, 0])).toEqual([a, b]);
+  });
+});

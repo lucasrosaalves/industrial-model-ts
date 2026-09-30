@@ -783,9 +783,9 @@ The returned array preserves the input order. Passing an empty array returns `[]
 
 ## Calculator
 
-Use the `Calculator` (from the `industrial-model/calculator` subpath) to compute derived time series — like KPIs and other formula-based metrics — from constants, a single Cognite time series, or several time series combined with a reducer. Each query pairs a `formula` (e.g. `"{power} / {flow} if {flow} != 0 else 0"`) with the parameters its `{alias}` placeholders resolve to; the calculator fetches every time-series parameter's datapoints in a single de-duplicated round trip, aligns them on timestamp (`intersect` by default, or `strict`), and evaluates the formula element-by-element. Pass optional `timeZone` so hour-and-longer aggregates follow a local calendar. The underlying formula engine (`evaluate`) is also available on its own, for evaluating formulas over in-memory numeric series with no Cognite dependency.
+Use the `Calculator` (from the `industrial-model/calculator` subpath) to compute derived time series — like KPIs and other formula-based metrics — from constants, a single Cognite time series, or several time series combined with a reducer. Each query pairs a `formula` (e.g. `"{power} / {flow} if {flow} != 0 else 0"`) with the parameters its `{alias}` placeholders resolve to; the calculator fetches every time-series parameter's datapoints in a single de-duplicated round trip, aligns them on timestamp (`intersect` by default, or `strict`), and evaluates the formula element-by-element. Pass optional `timeZone` so hour-and-longer aggregates follow a local calendar. Wrap a formula in `sum(...)` / `average(...)` with a query `bucketGranularity` to calculate per fetched point and then aggregate (ratios of totals like OEE Performance), and set `fillValue` on a parameter to fill its missing points instead of dropping the timestamp. The underlying formula engine (`evaluate`) is also available on its own, for evaluating formulas over in-memory numeric series with no Cognite dependency.
 
-See the [Calculator documentation](./src/calculator/README.md) for a quick start, constants, multi-series reducers, timestamp alignment, aggregated parameters, calendar timezones, batching multiple queries, a full OEE example, `rolling_average`, supported operators, and error handling.
+See the [Calculator documentation](./src/calculator/README.md) for a quick start, constants, multi-series reducers, timestamp alignment and fill values, aggregated parameters, calendar timezones, batching multiple queries, a full OEE example, `rolling_average`, bucket aggregates, supported operators, and error handling.
 
 ## Aggregation
 
@@ -1422,7 +1422,7 @@ Logical combinators `AND`, `OR`, and `NOT` are supported at any nesting level, i
 | `validateCalculatorQuery`, `validateCalculatorQueries` | Runtime validation of calculator queries. |
 | `evaluate`, `compileFormula`, `clearCache` | Formula engine for evaluating formulas over in-memory numeric series. |
 | `EvaluationResult`, `Parameters`, `ParameterValue`, `CompiledFormula` | Formula engine types. |
-| `CalculatorError`, `DatapointsRetrievalError` | Package-wide error root and CDF retrieval failures. |
+| `CalculatorError`, `DatapointsRetrievalError`, `BucketGranularityError` | Package-wide error root, CDF retrieval failures, and `sum(...)` / `average(...)` queries without a usable `bucketGranularity`. |
 | `FormulaError`, `InvalidFormulaError`, `MissingParameterError`, `ParameterError`, `ParameterLengthError`, `ParameterTimestampError`, `MissingTimeAxisError` | Structural formula errors. |
 | `ArithmeticError`, `ZeroDivisionError`, `OverflowError` | Value-dependent arithmetic errors. |
 

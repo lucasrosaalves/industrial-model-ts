@@ -1,3 +1,5 @@
+import type { BucketAggregate } from "./types";
+
 /** Simple moving average over the last ``window`` points (partial prefix).
  *
  * At index ``i`` the result is the mean of the finite values in
@@ -53,3 +55,10 @@ export const ALLOWED_FUNCTIONS: Readonly<Record<string, FunctionSpec>> = {
     apply: rollingAverage,
   },
 };
+
+/**
+ * Calls that aggregate their argument into time buckets. They are not series
+ * transforms (the compiler splits them out), so they live outside
+ * `ALLOWED_FUNCTIONS`.
+ */
+export const BUCKET_AGGREGATES: ReadonlySet<string> = new Set<BucketAggregate>(["sum", "average"]);

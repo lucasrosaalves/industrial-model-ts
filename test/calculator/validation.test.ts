@@ -313,3 +313,42 @@ describe("calculator validation: duplicate aliases", () => {
     ).toThrow(/queries\.0[\s\S]*queries\.1/);
   });
 });
+
+describe("calculator validation: fillValue and bucketGranularity", () => {
+  function seriesParam(fillValue?: number): unknown {
+    return {
+      type: "single_timeseries",
+      alias: "A",
+      timeSeries: TS_1,
+      ...(fillValue === undefined ? {} : { fillValue }),
+    };
+  }
+
+  it("fillValue is optional", () => {
+    expect(() => validate(queryWith(seriesParam()))).not.toThrow();
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY])("fillValue must be finite (%s)", (value) => {
+    expect(() => validate(queryWith(seriesParam(value)))).toThrow(/fillValue/);
+  });
+
+  it("fillValue is rejected with strict alignment", () => {
+    expect(() =>
+      validate({ formula: "{A}", parameters: [seriesParam(0)], alignment: "strict" }),
+    ).toThrow(/fillValue needs alignment/);
+  });
+
+  it("fillValue is accepted with intersect alignment", () => {
+    expect(() => validate(queryWith(seriesParam(0)))).not.toThrow();
+    expect(() =>
+      validate({ formula: "{A}", parameters: [seriesParam(0)], alignment: "intersect" }),
+    ).not.toThrow();
+  });
+
+  it("bucketGranularity is optional", () => {
+    expect(() => validate({ formula: "{A}", parameters: [] })).not.toThrow();
+    expect(() =>
+      validate({ formula: "{A}", parameters: [], bucketGranularity: "1h" }),
+    ).not.toThrow();
+  });
+});
