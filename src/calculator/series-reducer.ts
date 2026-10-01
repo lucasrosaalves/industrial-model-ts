@@ -152,6 +152,50 @@ function sum(values: number[]): number {
 }
 
 /**
+ * Sum several series on the union of their timestamps without a full grid.
+ *
+ * A missing point counts as `fillValue`, including series that are empty
+ * (they never have a point). Empty input series still count toward how many
+ * fills apply at each timestamp.
+ */
+function reduceSumFilled(series: Series[], fillValue: number): Series {
+  const prepared = series.filter((leaf) => leaf.length > 0).map((leaf) => prepare([...leaf]));
+  if (prepared.length === 0) {
+    return [];
+  }
+
+  const nSeries = series.length;
+  const totals = new Map<number, number>();
+  const present = new Map<number, number>();
+  const timestamps = new Map<number, Date>();
+
+  for (const leaf of prepared) {
+    for (const point of leaf) {
+      const time = point.timestamp.getTime();
+      totals.set(time, (totals.get(time) ?? 0) + point.value);
+      present.set(time, (present.get(time) ?? 0) + 1);
+      if (!timestamps.has(time)) {
+        timestamps.set(time, point.timestamp);
+      }
+    }
+  }
+  if (totals.size === 0) {
+    return [];
+  }
+  if (fillValue === 0) {
+    return [...totals.entries()]
+      .sort(([left], [right]) => left - right)
+      .map(([time, value]) => ({ timestamp: timestamps.get(time) as Date, value }));
+  }
+  return [...totals.keys()]
+    .sort((left, right) => left - right)
+    .map((time) => ({
+      timestamp: timestamps.get(time) as Date,
+      value: (totals.get(time) as number) + fillValue * (nSeries - (present.get(time) as number)),
+    }));
+}
+
+/**
  * Combines or aligns multiple time series by intersecting on timestamp.
  *
  * A timestamp survives only when every input series has a value for it.
@@ -178,6 +222,9 @@ export class SeriesReducer {
       return prepare([...(series[0] as Series)]);
     }
     if (fillValue !== undefined) {
+      if (reducer === "sum") {
+        return reduceSumFilled(series, fillValue);
+      }
       const filled = this.alignFilled(series, new Array(series.length).fill(fillValue));
       return (filled[0] as Series).map((point, index) => ({
         timestamp: point.timestamp,

@@ -184,7 +184,7 @@ If you only have one time series for a parameter, use `"single_timeseries"` inst
 - Series are combined by **intersecting on timestamp**: a timestamp survives into the reduced series only if *every* referenced time series has a value at that exact timestamp. This is stricter than a positional zip — it won't silently pair up unrelated points if one series has a gap the others don't.
 - Because of that, **use `aggregateType` + `granularity`** whenever you reduce multiple time series. Aggregated queries bucket every series onto the same aligned time grid, so timestamps line up; raw datapoints from independent series almost never share exact timestamps, and reducing raw series will typically collapse to an empty result.
 - If the referenced series have no timestamps in common at all, the parameter's series — and therefore the formula's result — is empty.
-- With `fillValue`, the series are combined on the **union** of their timestamps instead, each filled with `fillValue` where it has no point. For counts summed across lines (`reducer: "sum"`, `fillValue: 0`), a minute where only one line reported keeps that line's count instead of being dropped.
+- With `fillValue`, the series are combined on the **union** of their timestamps instead, each filled with `fillValue` where it has no point. For counts summed across lines (`reducer: "sum"`, `fillValue: 0`), a minute where only one line reported keeps that line's count instead of being dropped. `reducer: "sum"` with a fill value accumulates in one pass over datapoints (same result as filling the union grid first); use that for hundreds of misaligned PLC series.
 - `reducer` is one of `"min"`, `"max"`, `"sum"`, `"average"`.
 
 ## Timestamp alignment
