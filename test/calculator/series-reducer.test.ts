@@ -10,6 +10,22 @@ function series(...points: Array<[Date, number]>): Series {
   return points.map(([timestamp, value]) => ({ timestamp, value }));
 }
 
+function reduceSumViaAlignFilled(
+  reducer: SeriesReducer,
+  lines: Series[],
+  fillValue: number,
+): Series {
+  const filled = reducer.alignFilled(
+    lines,
+    lines.map(() => fillValue),
+  );
+  const axis = filled[0] as Series;
+  return axis.map((point, index) => ({
+    timestamp: point.timestamp,
+    value: filled.reduce((total, leaf) => total + (leaf[index] as { value: number }).value, 0),
+  }));
+}
+
 describe("SeriesReducer: zero / one series (no reduction needed)", () => {
   it("empty series list returns empty list", () => {
     const reducer = new SeriesReducer();
@@ -287,6 +303,16 @@ describe("SeriesReducer: reduce with a fill value", () => {
     expect(reducer.reduce([lineA, []], "sum", 0)).toEqual(lineA);
   });
 
+  it("non-zero fill counts empty series toward the sum", () => {
+    const reducer = new SeriesReducer();
+    const lineA = series([T0, 10], [T1, 20]);
+
+    expect(reducer.reduce([lineA, []], "sum", 5)).toEqual(series([T0, 15], [T1, 25]));
+    expect(reducer.reduce([lineA, []], "sum", 5)).toEqual(
+      reduceSumViaAlignFilled(reducer, [lineA, []], 5),
+    );
+  });
+
   it("fills before reducing", () => {
     const reducer = new SeriesReducer();
     const a = series([T0, 4], [T1, 6]);
@@ -298,6 +324,39 @@ describe("SeriesReducer: reduce with a fill value", () => {
 
   it("empty series reduce to an empty series", () => {
     expect(new SeriesReducer().reduce([[], []], "sum", 0)).toEqual([]);
+  });
+
+  it.each([0, -1, 5])("filled sum matches union grid (fillValue=%s)", (fillValue) => {
+    const reducer = new SeriesReducer();
+    const base = new Date("2024-06-01T00:00:00.000Z");
+    const lines: Series[] = Array.from({ length: 40 }, (_, n) =>
+      Array.from({ length: Math.ceil(120 / (3 + (n % 4))) }, (_, i) => {
+        const minutes = i * (3 + (n % 4));
+        return {
+          timestamp: new Date(base.getTime() + minutes * 60_000),
+          value: minutes % 7,
+        };
+      }),
+    );
+    expect(reducer.reduce(lines, "sum", fillValue)).toEqual(
+      reduceSumViaAlignFilled(reducer, lines, fillValue),
+    );
+  });
+
+  it.each([0, 3])("filled sum with some empty inputs (fillValue=%s)", (fillValue) => {
+    const reducer = new SeriesReducer();
+    const base = new Date("2024-06-01T00:00:00.000Z");
+    const hour = 60 * 60_000;
+    const lines: Series[] = [
+      series([base, 1], [new Date(base.getTime() + hour), 2]),
+      [],
+      series([new Date(base.getTime() + hour), 4]),
+      [],
+    ];
+
+    expect(reducer.reduce(lines, "sum", fillValue)).toEqual(
+      reduceSumViaAlignFilled(reducer, lines, fillValue),
+    );
   });
 });
 
