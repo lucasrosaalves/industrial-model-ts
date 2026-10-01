@@ -326,25 +326,22 @@ describe("SeriesReducer: reduce with a fill value", () => {
     expect(new SeriesReducer().reduce([[], []], "sum", 0)).toEqual([]);
   });
 
-  it.each([0, -1, 5])(
-    "filled sum matches union grid (fillValue=%s)",
-    (fillValue) => {
-      const reducer = new SeriesReducer();
-      const base = new Date("2024-06-01T00:00:00.000Z");
-      const lines: Series[] = Array.from({ length: 40 }, (_, n) =>
-        Array.from({ length: Math.ceil(120 / (3 + (n % 4))) }, (_, i) => {
-          const minutes = i * (3 + (n % 4));
-          return {
-            timestamp: new Date(base.getTime() + minutes * 60_000),
-            value: minutes % 7,
-          };
-        }),
-      );
-      expect(reducer.reduce(lines, "sum", fillValue)).toEqual(
-        reduceSumViaAlignFilled(reducer, lines, fillValue),
-      );
-    },
-  );
+  it.each([0, -1, 5])("filled sum matches union grid (fillValue=%s)", (fillValue) => {
+    const reducer = new SeriesReducer();
+    const base = new Date("2024-06-01T00:00:00.000Z");
+    const lines: Series[] = Array.from({ length: 40 }, (_, n) =>
+      Array.from({ length: Math.ceil(120 / (3 + (n % 4))) }, (_, i) => {
+        const minutes = i * (3 + (n % 4));
+        return {
+          timestamp: new Date(base.getTime() + minutes * 60_000),
+          value: minutes % 7,
+        };
+      }),
+    );
+    expect(reducer.reduce(lines, "sum", fillValue)).toEqual(
+      reduceSumViaAlignFilled(reducer, lines, fillValue),
+    );
+  });
 
   it.each([0, 3])("filled sum with some empty inputs (fillValue=%s)", (fillValue) => {
     const reducer = new SeriesReducer();
