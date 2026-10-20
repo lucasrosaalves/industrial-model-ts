@@ -554,7 +554,7 @@ const { items } = await model.query<CogniteAsset>()({
 });
 ```
 
-Expanded relations use internal pagination as well. When a nested relation query reaches the internal page size, the client follows dependency cursors for up to 3 additional rounds.
+Expanded relations use internal pagination as well. When a nested relation query reaches the internal page size, the client follows dependency cursors for up to 3 additional rounds. Each follow-up query keeps every ancestor expression of the paged relation (the root included, on its current page) so the relation can still be resolved, but returns only the relation and what is nested under it.
 
 ## Upsert
 
