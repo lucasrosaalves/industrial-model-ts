@@ -1,5 +1,9 @@
-import type { InstancesQueryRequest, InstancesQueryResponse } from "../cognite";
-import { EDGE_MARKER, MAX_LIMIT, NESTED_SEP } from "../constants";
+import type {
+  InstancesQueryRequest,
+  InstancesQueryResponse,
+  QueryTableExpression,
+} from "../cognite";
+import { MAX_LIMIT } from "../constants";
 import type { QueryResultMap } from "../types";
 
 export function mapNodesAndEdges(
@@ -32,8 +36,7 @@ export function getQueryForDependenciesPagination(
   queryResult: InstancesQueryResponse,
   viewExternalId: string,
 ): InstancesQueryRequest | null {
-  const cursorKeys = new Set(Object.keys(queryResult.nextCursor));
-  const { nodesParent, nodesChildren } = getParentAndChildrenNodes(cursorKeys);
+  const { nodesParent, nodesChildren } = getParentAndChildrenNodes(query);
 
   const leafCursors = getLeafCursors(queryResult, viewExternalId, nodesParent, nodesChildren);
 
@@ -44,39 +47,39 @@ export function getQueryForDependenciesPagination(
   return buildDependenciesQuery(query, nodesParent, nodesChildren, leafCursors);
 }
 
-function getParentAndChildrenNodes(keys: Set<string>): {
+/**
+ * Ancestors and descendants of every table expression, following each expression's `from`.
+ * Built from the query, not from the cursor keys: an ancestor with no next page has no cursor,
+ * yet the follow-up query still needs it, or the API rejects the expressions that reference it.
+ */
+function getParentAndChildrenNodes(query: InstancesQueryRequest): {
   nodesParent: Map<string, Set<string>>;
   nodesChildren: Map<string, Set<string>>;
 } {
   const nodesParent = new Map<string, Set<string>>();
   const nodesChildren = new Map<string, Set<string>>();
 
-  for (const key of keys) {
-    const keyParts = key.split(NESTED_SEP);
-    const validParents = new Set<string>();
+  for (const key of Object.keys(query.with)) {
+    const ancestors = new Set<string>();
+    let parent = getFrom(query.with[key]);
 
-    for (let i = keyParts.length - 1; i > 0; i--) {
-      const parentPath = keyParts.slice(0, i).join(NESTED_SEP);
-      const parentWithEdgeMarker = `${parentPath}${NESTED_SEP}${EDGE_MARKER}`;
-
-      if (keys.has(parentWithEdgeMarker)) {
-        validParents.add(parentWithEdgeMarker);
-        const children = nodesChildren.get(parentWithEdgeMarker) ?? new Set<string>();
-        children.add(key);
-        nodesChildren.set(parentWithEdgeMarker, children);
-      }
-      if (keys.has(parentPath)) {
-        validParents.add(parentPath);
-        const children = nodesChildren.get(parentPath) ?? new Set<string>();
-        children.add(key);
-        nodesChildren.set(parentPath, children);
-      }
+    while (parent !== undefined && parent in query.with && !ancestors.has(parent)) {
+      ancestors.add(parent);
+      const children = nodesChildren.get(parent) ?? new Set<string>();
+      children.add(key);
+      nodesChildren.set(parent, children);
+      parent = getFrom(query.with[parent]);
     }
 
-    nodesParent.set(key, validParents);
+    nodesParent.set(key, ancestors);
   }
 
   return { nodesParent, nodesChildren };
+}
+
+function getFrom(expression: QueryTableExpression | undefined): string | undefined {
+  if (!expression) return undefined;
+  return "nodes" in expression ? expression.nodes.from : expression.edges.from;
 }
 
 function getLeafCursors(
@@ -135,13 +138,16 @@ function buildDependenciesQuery(
   for (const [cursorKey, cursorValue] of Object.entries(leafCursors)) {
     const children = nodesChildren.get(cursorKey) ?? new Set<string>();
     const parent = nodesParent.get(cursorKey) ?? new Set<string>();
-    const validKeys = new Set([...parent, ...children, cursorKey]);
+    // Ancestors only scope the page: they run with the cursors of the current page and are not
+    // selected again, so their rows are not returned twice.
+    const selectedKeys = new Set([...children, cursorKey]);
+    const validKeys = new Set([...parent, ...selectedKeys]);
 
     for (const [k, v] of Object.entries(previousQuery.with)) {
       if (validKeys.has(k)) withExprs[k] = v;
     }
     for (const [k, v] of Object.entries(previousQuery.select)) {
-      if (validKeys.has(k)) selectExprs[k] = v;
+      if (selectedKeys.has(k)) selectExprs[k] = v;
     }
     for (const [k, v] of Object.entries(previousQuery.cursors ?? {})) {
       if (parent.has(k) && v) finalCursors[k] = v;
